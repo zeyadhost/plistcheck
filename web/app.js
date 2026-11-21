@@ -59,7 +59,7 @@ async function runCheck() {
     if (!response.ok) throw new Error(result.error || 'The check failed. Please try again.');
     if (revision !== currentRevision) { $('#result-status').textContent = 'INPUT CHANGED · RUN AGAIN'; return; }
     currentReport = result; reportRevision = currentRevision; severity = 'all'; renderReport();
-    if (matchMedia('(max-width: 850px)').matches) $('#results').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block:'start'});
+    if (matchMedia('(max-width: 1000px)').matches) $('#results').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block:'start'});
   } catch (e) { error(e.message || 'Could not reach the checker. Please try again.'); $('#result-status').textContent = 'CHECK NOT COMPLETED'; }
   finally { running = false; $('#run').disabled = false; $('#run').innerHTML = 'Check configuration <span>↗</span>'; }
 }

@@ -180,6 +180,7 @@ footer a { display: inline-flex; min-height: 44px; align-items: center; text-dec
   .firmware-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 1000px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
   .sidebar { position: static; width: auto; min-height: 72px; flex-direction: row; align-items: center; justify-content: space-between; padding: 14px 24px; gap: 20px; }
   .sidebar-description, .sidebar-bottom { display: none; }
   .sidebar nav { display: flex; gap: 4px; }
@@ -240,6 +241,9 @@ footer a { display: inline-flex; min-height: 44px; align-items: center; text-dec
   input, select { font-size: 1rem; min-height: 44px; }
   button, summary { min-height: 44px !important; }
   .primary { min-height: 48px !important; }
+}
+@media (min-width: 1001px) and (pointer: coarse) {
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
