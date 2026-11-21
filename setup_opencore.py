@@ -6,6 +6,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+import amd
+
 VERSION = "1.0.8"
 SHA256 = "2011e8b7216ecb2645d97ea710df965947edd406846e92050b9bc4190be6d27b"
 URL = f"https://github.com/acidanthera/OpenCorePkg/releases/download/{VERSION}/OpenCore-{VERSION}-RELEASE.zip"
@@ -33,6 +35,12 @@ def install():
             if local.startswith("ocvalidate") and not local.endswith(".md"):
                 target.chmod(0o755)
     print(f"Installed verified OpenCore {VERSION} validator and sample in {destination}")
+    with urllib.request.urlopen(amd.URL, timeout=60) as response:
+        patches = response.read(2 * 1024 * 1024)
+    if hashlib.sha256(patches).hexdigest() != amd.SHA256:
+        raise SystemExit("AMD reference checksum mismatch; installation stopped.")
+    (destination / "AMD-patches.plist").write_bytes(patches)
+    print(f"Installed verified AMD Vanilla reference {amd.COMMIT}")
 
 
 if __name__ == "__main__":
