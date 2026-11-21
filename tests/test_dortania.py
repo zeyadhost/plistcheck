@@ -174,3 +174,17 @@ def test_navi_advice_does_not_claim_native_navi22_support():
     finding = next(f for f in analyze(*fixture_case(6))["findings"] if f["id"] == "gpu-navi")
     assert "Navi 10/21/23" in finding["detail"]
     assert "Navi 22 is not natively supported and needs NootRX" in finding["detail"]
+
+
+@pytest.mark.parametrize("value,present", [("pikera", True), (b"pikera", True), (b"pikera\0\0", True), ("", False), (b"other", False), (42, False), ({}, False)])
+@pytest.mark.parametrize("gpu", ["amd-navi", "amd-polaris-vega"])
+def test_pikera_device_property(value, present, gpu):
+    config, profile = fixture_case(6)
+    profile["gpu"] = gpu
+    config["NVRAM"]["Add"][GUID]["boot-args"] = ""
+    config["DeviceProperties"]["Add"]["PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)"] = {"agdpmod": value}
+    ids = {f["id"] for f in analyze(config, profile)["findings"]}
+    if gpu == "amd-navi":
+        assert ("gpu-navi" in ids) != present
+    else:
+        assert ("gpu-polaris-pikera" in ids) == present
