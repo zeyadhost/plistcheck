@@ -168,3 +168,9 @@ def test_gpu_disable_includes_all_supported_amd_choices(gpu):
     profile["gpu"] = gpu
     config["NVRAM"]["Add"][GUID]["boot-args"] += " -wegnoegpu"
     assert "gpu-disable" in {f["id"] for f in analyze(config, profile)["findings"]}
+
+
+def test_navi_advice_does_not_claim_native_navi22_support():
+    finding = next(f for f in analyze(*fixture_case(6))["findings"] if f["id"] == "gpu-navi")
+    assert "Navi 10/21/23" in finding["detail"]
+    assert "Navi 22 is not natively supported and needs NootRX" in finding["detail"]
