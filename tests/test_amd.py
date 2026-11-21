@@ -28,7 +28,7 @@ def amd_config(cores=8):
 
 
 def report(config, macos="14", cores="8"):
-    return analyze(config, profile_from({"cpu": "zen", "cpu_cores": cores, "macos": macos}))
+    return analyze(config, profile_from({"device": "desktop", "cpu": "zen", "cpu_cores": cores, "macos": macos}))
 
 
 def ids(result):
@@ -146,7 +146,7 @@ def test_core_count_input_is_validated(value):
 
 def test_api_checks_core_count_and_demo_passes_real_validator():
     client = app.test_client()
-    result = client.post("/api/check", data={"cpu": "zen", "cpu_cores": "8", "config": (io.BytesIO(plistlib.dumps(amd_config(64))), "config.plist")})
+    result = client.post("/api/check", data={"device": "desktop", "cpu": "zen", "cpu_cores": "8", "config": (io.BytesIO(plistlib.dumps(amd_config(64))), "config.plist")})
     assert result.status_code == 200
     assert "amd-core-count" in ids(result.json)
     assert native_validate(plistlib.loads(client.get("/api/demo").data))["status"] == "passed"

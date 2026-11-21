@@ -15,7 +15,7 @@ def client():
 
 
 def profile(**overrides):
-    return profile_from({"cpu": "coffee-lake", "gpu": "amd-supported", "chipset": "z390", "macos": "14", **overrides})
+    return profile_from({"device": "desktop", "cpu": "coffee-lake", "gpu": "amd-supported", "chipset": "z390", "macos": "14", **overrides})
 
 
 def finding_ids(config, **overrides):
@@ -44,7 +44,7 @@ def test_api_rejects_missing_file_invalid_version_and_invalid_profile(client):
 
 
 def test_real_validator_and_hardware_findings(client):
-    response = client.post("/api/check", data={"cpu": "coffee-lake", "gpu": "amd-supported", "chipset": "z390", "cfg_lock": "enabled",
+    response = client.post("/api/check", data={"device": "desktop", "cpu": "coffee-lake", "gpu": "amd-supported", "chipset": "z390", "cfg_lock": "enabled",
         "config": (io.BytesIO(plistlib.dumps(demo_config())), "config.plist")})
     assert response.status_code == 200
     result = response.json
