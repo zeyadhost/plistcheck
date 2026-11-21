@@ -38,12 +38,13 @@ def build(opencore=None, udk=None):
         "-sINVOKE_RUN=0", "-sEXIT_RUNTIME=0", "-sALLOW_MEMORY_GROWTH=1",
         "-sMAXIMUM_MEMORY=268435456", "-sSTACK_SIZE=1048576", "-sDYNAMIC_EXECUTION=0",
         "-sEXPORTED_RUNTIME_METHODS=FS,callMain", "-sENVIRONMENT=web,worker,node", "-sASSERTIONS=0",
+        "-sUSE_OFFSET_CONVERTER=1",
     ])
     # EDK II's Ia32 binding has the same 32-bit UINTN/pointer width as wasm32.
     # The upstream userspace shims already have non-x86 fallbacks; no validation code is patched.
     with (ROOT / "vendor" / "ocvalidate-build.log").open("w") as log:
         result = subprocess.run([
-            "make", f"-j{min(os.cpu_count() or 2, 8)}", "UDK_ARCH=Ia32", f"UDK_PATH={edk}",
+            "make", "-B", f"-j{min(os.cpu_count() or 2, 8)}", "UDK_ARCH=Ia32", f"UDK_PATH={edk}",
             "CC=emcc", "STRIP=true", f"PRODUCT={output}", f"LDFLAGS={flags}",
         ], cwd=oc / "Utilities" / "ocvalidate", stdout=log, stderr=subprocess.STDOUT)
     if result.returncode:

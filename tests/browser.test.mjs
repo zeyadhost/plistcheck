@@ -8,7 +8,8 @@ import { checkLocally } from '../dist/assets/engine.mjs';
 
 const py = await loadPyodide({indexURL: resolve('dist/assets/runtime/pyodide')});
 await py.loadPackage('hashlib');
-py.unpackArchive(readFileSync('dist/assets/runtime/rules.zip'), 'zip', {extractDir: '/app'});
+// Pyodide's buffer conversion expects a plain typed array, not Node's Buffer subclass.
+py.unpackArchive(new Uint8Array(readFileSync('dist/assets/runtime/rules.zip')), 'zip', {extractDir: '/app'});
 py.runPython("import sys; sys.path.insert(0, '/app'); import browser_bridge");
 const cases = JSON.parse(readFileSync('vendor/browser-fixtures.json', 'utf8'));
 
