@@ -2,8 +2,6 @@
 
 plistcheck runs OpenCore's validator and hardware-specific checks on your `config.plist`. Upload an XML or binary plist, choose your hardware and target macOS, and review findings with links to the relevant documentation.
 
-[Hosted preview (requires Devin organization access)](https://plistcheck--yfyzendo.preview.devinapps.com)
-
 A valid plist can still fail to boot. Keep a known-good EFI backup before making changes. Coverage gaps appear in the interface and exported JSON report.
 
 ## Run locally
