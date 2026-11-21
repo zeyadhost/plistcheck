@@ -24,7 +24,7 @@ PROFILES = [
 ]
 MISSED = {
     2: {"smbios", "vault", "booter-memory", "gpu-polaris-pikera"},
-    4: {"smbios", "gpu-legacy-intel", "igpu-platform-id"},
+    4: {"smbios", "gpu-legacy-intel", "igpu-platform-id", "write-unprotector"},
     6: {"setup-virtual-map", "z390services", "awac", "smbios", "igpu-headless", "gpu-navi"},
     8: {"setup-virtual-map", "smbios", "amd-plug", "amd-intel-acpi", "amd-smc-plugins", "amd-cfglock", "amd-iommu"},
     10: {"igpu-platform-id", "smbios"},
@@ -120,7 +120,7 @@ def test_headless_framebuffer_missing_wrong_and_correct(value, expected):
     assert ("igpu-headless" in {f["id"] for f in analyze(config, profile)["findings"]}) == expected
 
 
-@pytest.mark.parametrize("write,rebuild,expected", [(True, False, set()), (False, True, set()), (True, True, {"booter-memory"}), (False, False, {"write-unprotector"})])
+@pytest.mark.parametrize("write,rebuild,expected", [(True, False, set()), (False, True, {"write-unprotector"}), (True, True, {"booter-memory"}), (False, False, {"write-unprotector"})])
 def test_memory_map_strategies(write, rebuild, expected):
     config, profile = fixture_case(3)
     config["Booter"]["Quirks"].update(EnableWriteUnprotector=write, RebuildAppleMemoryMap=rebuild)
