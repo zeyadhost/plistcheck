@@ -66,15 +66,23 @@ def inspect_patches(patches, target, cores):
     Optional PAT alternatives and board/Zen-4-specific IOPCI patches aren't mandatory.
     Their correctness, custom patch sets and future upstream revisions remain gaps.
     """
-    reference = reference_patches()
+    reference = [p for p in reference_patches() if p["Enabled"] and "PAT" not in p["Comment"] and p["Identifier"] == "kernel"]
     active = [p for p in patches if isinstance(p, dict) and p.get("Enabled") is True
               and p.get("Arch") in ("Any", "x86_64") and overlap(bounds(p), target)] if isinstance(patches, list) else []
     missing, core_errors, range_errors = [], [], []
     recognized = 0
+    # Check every active recognized operation, even a historical one that should
+    # not be enabled anywhere in this target. Duplicate operations may have a
+    # union of valid reference intervals.
+    for patch in active:
+        matches = [p for p in reference if same_patch(patch, p, "cpuid_cores_per_package" in p["Comment"])]
+        low, high = bounds(patch)
+        active_bounds = (max(low, target[0]), min(high, target[1]))
+        if matches and not covered([bounds(p) for p in matches], active_bounds):
+            range_errors.append(matches[0]["Comment"])
     for expected in reference:
         expected_bounds = bounds(expected)
-        if (not expected["Enabled"] or "PAT" in expected["Comment"] or expected["Identifier"] != "kernel"
-                or not overlap(expected_bounds, target)):
+        if not overlap(expected_bounds, target):
             continue
         core = "cpuid_cores_per_package" in expected["Comment"]
         matches = [p for p in active if same_patch(p, expected, core)]
@@ -85,8 +93,6 @@ def inspect_patches(patches, target, cores):
             if not overlap((low, high), required):
                 continue
             recognized += 1
-            if max(low, target[0]) < required[0] or min(high, target[1]) > required[1]:
-                range_errors.append(expected["Comment"])
             intervals.append((max(low, required[0]), min(high, required[1])))
             if core:
                 count = patch["Replace"][1]

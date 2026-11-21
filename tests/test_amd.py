@@ -105,6 +105,14 @@ def test_point_release_core_patch_transition_and_overbroad_ranges():
     assert "amd-patch-ranges" in ids(report(config, "13"))
 
 
+def test_extra_historical_patch_enabled_only_on_wrong_kernel_is_an_error():
+    config = amd_config()
+    older_core = copy.deepcopy(next(p for p in config["Kernel"]["Patch"] if "cpuid_cores_per_package" in p["Comment"]))
+    older_core.update(MinKernel="23.0.0", MaxKernel="23.99.99")
+    config["Kernel"]["Patch"].append(older_core)
+    assert "amd-patch-ranges" in ids(report(config))
+
+
 def test_unknown_physical_count_is_incomplete_not_a_pass():
     result = report(amd_config(64), cores="")
     assert result["status"] == "incomplete"
