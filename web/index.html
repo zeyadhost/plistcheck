@@ -4,11 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f5f5f7">
-  <meta name="description" content="A second pair of eyes for your OpenCore config. Official validation, hardware-aware checks, and fixes with sources.">
-  <title>plistcheck — Know before you boot</title>
+  <meta name="description" content="Check an OpenCore config.plist against your hardware with ocvalidate and source-linked rules.">
+  <title>plistcheck | OpenCore config checker</title>
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/assets/manifest.json" crossorigin="use-credentials">
   <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/select.js" defer></script>
   <script src="/assets/app.js" defer></script>
 </head>
 <body>
@@ -20,7 +21,7 @@
   <main>
     <section class="intro" aria-labelledby="page-title">
       <h1 id="page-title">Know before you boot.</h1>
-      <p>A little clarity for your OpenCore config.<br>Check your plist. Match your hardware. Boot better informed.</p>
+      <p>Check your OpenCore config against your hardware.</p>
     </section>
     <div class="inspector-window" id="checker">
       <div class="window-bar">
@@ -36,57 +37,54 @@
               <input id="file" type="file" accept=".plist,application/x-plist,application/xml,text/xml" aria-label="Upload config.plist" aria-describedby="file-subtitle form-error">
               <span class="file-glyph" aria-hidden="true"><svg viewBox="0 0 36 44" fill="none"><path d="M5 1h18l12 12v27a3 3 0 0 1-3 3H5a4 4 0 0 1-4-4V5a4 4 0 0 1 4-4Z" fill="url(#file-fill)" stroke="#96c5ff"/><path d="M23 1v9a3 3 0 0 0 3 3h9" stroke="#96c5ff"/><path d="m13 22-4 4 4 4m10-8 4 4-4 4m-4-10-2 12" stroke="#0071e3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="file-fill" x1="18" y1="1" x2="18" y2="43" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#e6f1ff"/></linearGradient></defs></svg></span>
               <span class="file-copy"><strong id="file-title">Drop your config.plist</strong><span id="file-subtitle">or click to browse files</span></span>
-              <span class="upload-arrow" aria-hidden="true">↑</span>
             </div>
-            <div class="file-bottom"><span>Just looking around?</span><button id="demo" class="text-button" type="button">Try an example <span aria-hidden="true">↗</span></button></div>
+            <div class="file-bottom"><button id="demo" class="text-button" type="button">Try an example</button></div>
             <p id="form-error" class="form-error" role="alert" hidden></p>
             <p id="example-note" class="form-note example-note" role="status" hidden></p>
           </section>
           <form id="profile" class="hardware-panel">
-            <div class="panel-heading"><h2>Made for your hardware.</h2><span class="label">Tell us what’s inside</span></div>
-            <p class="form-note" id="device-help">Choose your device to see the relevant checks. Unknown hardware stays a visible gap, not a quiet pass.</p>
+            <div class="panel-heading"><h2>Hardware</h2></div>
+            <p class="form-note" id="device-help">Unknown hardware checks are skipped.</p>
             <div class="form-grid">
               <label>Device type<select name="device" aria-describedby="device-help"><option value="other">Other / not sure</option><option value="desktop">Desktop</option><option value="laptop">Laptop</option></select></label>
               <label>CPU generation<select name="cpu" required disabled><option value="other">Other / not sure</option><optgroup label="Intel"><option value="haswell">Haswell · 4th gen</option><option value="broadwell">Broadwell · 5th gen</option><option value="skylake">Skylake · 6th gen</option><option value="kaby-lake">Kaby Lake · 7th gen</option><option value="coffee-lake">Coffee Lake · 8th/9th gen</option><option value="whiskey-lake" data-device="laptop" hidden disabled>Whiskey Lake · 8th gen U</option><option value="comet-lake">Comet Lake · 10th gen</option><option value="ice-lake" data-device="laptop" hidden disabled>Ice Lake · 10th gen mobile</option></optgroup><option value="zen" data-device="desktop" hidden disabled>AMD Zen · Ryzen / TR</option></select></label>
-              <label id="core-count-field" hidden>Physical CPU cores<input type="number" name="cpu_cores" disabled min="1" max="255" step="1" inputmode="numeric" placeholder="e.g. 8 for a Ryzen 7 5800X" aria-describedby="core-count-help"><small id="core-count-help">Cores, not threads. Unknown leaves AMD patch verification incomplete.</small></label>
+              <label id="core-count-field" hidden>Physical CPU cores<input type="number" name="cpu_cores" disabled min="1" max="255" step="1" inputmode="numeric" placeholder="e.g. 8" aria-describedby="core-count-help"><small id="core-count-help">Use physical cores, not threads.</small></label>
               <label>GPU family<select name="gpu"><option value="other">Other / not sure</option><option value="amd-supported">AMD · other supported / not sure</option><option value="amd-polaris-vega">AMD Polaris / Vega · RX 400/500, Vega</option><option value="amd-navi">AMD Navi 10/21/22/23 · RX 5000/6000</option><option value="amd-navi24">AMD Navi 24</option><option value="intel-supported">Intel HD / UHD (pre-Xe)</option><option value="intel-xe">Intel Xe / Arc</option><option value="nvidia-kepler">NVIDIA Kepler</option><option value="nvidia-maxwell">NVIDIA Maxwell / Pascal</option><option value="nvidia-turing">NVIDIA Turing or newer</option></select></label>
               <label id="chipset-field" hidden>Motherboard chipset<select name="chipset" disabled><option value="other">Other / not sure</option><option value="100-200">Intel Z170/Z270/H/B 100–200 series</option><option value="400">Intel Z490 / B460 / H470 / H410</option><option value="x570-b450">AMD X570 / X470 / B450 / A320</option><option value="trx40">AMD TRx40</option><option value="z390">Intel Z390</option><option value="300">B360 / B365 / H310 / H370</option><option value="z370">Intel Z370</option><option value="b550-a520">AMD B550 / A520</option></select></label>
               <label>Target macOS<select name="macos"><option value="15">Sequoia · 15</option><option value="14" selected>Sonoma · 14</option><option value="13">Ventura · 13</option><option value="12">Monterey · 12</option><option value="11.3">Big Sur · 11.3+</option><option value="11.0">Big Sur · 11.0–11.2</option><option value="10.15">Catalina · 10.15</option></select></label>
-              <div class="version-field"><span>Validator version</span><p><span class="version-dot" aria-hidden="true"></span>OpenCore 1.0.8</p><input type="hidden" name="opencore" value="1.0.8"></div>
+              <div class="version-field"><span>Supported OpenCore</span><p><span class="version-dot" aria-hidden="true"></span>1.0.8</p><input type="hidden" name="opencore" value="1.0.8"></div>
             </div>
-            <details class="model-fields"><summary>Exact model labels <span>Optional <i aria-hidden="true">⌄</i></span></summary><div class="form-grid">
-              <label>CPU model <span class="optional">optional</span><input name="cpu_model" maxlength="120" placeholder="e.g. Intel Core i7-9700K"></label>
-              <label>GPU model <span class="optional">optional</span><input name="gpu_model" maxlength="120" placeholder="e.g. Radeon RX 580"></label>
-              <label>Device or board model <span class="optional">optional</span><input name="board" maxlength="120" placeholder="Your device or motherboard"></label>
-            </div><p class="form-note">Labels are for your report, not automatically decoded hardware.</p></details>
-            <details class="firmware"><summary>BIOS settings <span>Unknown = checks skipped <i aria-hidden="true">⌄</i></span></summary><div class="firmware-grid">
+            <details class="model-fields"><summary>Model names <span>Optional <svg class="chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></summary><div class="form-grid">
+              <label>CPU model<input name="cpu_model" maxlength="120" placeholder="e.g. Intel Core i7-9700K"></label>
+              <label>GPU model<input name="gpu_model" maxlength="120" placeholder="e.g. Radeon RX 580"></label>
+              <label>Device or board model<input name="board" maxlength="120" placeholder="Your device or motherboard"></label>
+            </div><p class="form-note">Used as report labels only.</p></details>
+            <details class="firmware"><summary>BIOS settings <svg class="chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><p class="form-note">Unknown settings are skipped.</p><div class="firmware-grid">
               <label>CFG-Lock<select name="cfg_lock"><option value="unknown">Unknown</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label>
               <label>VT-d<select name="vt_d"><option value="unknown">Unknown</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label>
               <label>Resizable BAR<select name="rebar"><option value="unknown">Unknown</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label>
             </div></details>
-            <p class="version-note">Match your installed OpenCore version. Other releases aren’t supported. GPU families are broad; verify your exact chip and framebuffer.</p>
-            <button class="primary" id="run" type="submit">Check configuration <span aria-hidden="true">↗</span></button>
-            <p class="privacy"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2M4 7h8v7H4V7Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg><span>Checked on this server, then discarded.<br>No account. No saved configs. No automatic edits.</span></p>
+            <button class="primary" id="run" type="submit">Check configuration</button>
+            <p class="privacy"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2M4 7h8v7H4V7Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg><span>Uploads are checked, then discarded.</span></p>
           </form>
         </div>
         <section class="results-column" id="results" tabindex="-1" aria-label="Diagnostic results">
-          <div class="panel-heading"><h2>Diagnostics</h2><span class="status-label" id="result-status" role="status" aria-live="polite">Ready when you are</span></div>
+          <div class="panel-heading"><h2>Diagnostics</h2><span class="status-label" id="result-status" role="status" aria-live="polite">No report yet</span></div>
           <div id="empty-state">
             <div class="document-scene" aria-hidden="true"><div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div><div class="back-document"></div><div class="config-document"><svg viewBox="0 0 40 30" fill="none"><path d="M10 4H4v22h6M30 4h6v22h-6M13 15l5 5L28 9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>config.plist</span><div class="document-lines"><i></i><i></i><i></i></div></div><span class="document-badge"><svg viewBox="0 0 24 24" fill="none"><path d="m7 12 3.5 3.5L17 9" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
-            <div class="empty-copy"><h3>Small details.<br>A more informed boot.</h3><p>Add your configuration and we’ll help you<br class="desktop-break"> see what needs a closer look.</p></div>
+            <div class="empty-copy"><h3>Ready to check</h3><p>Upload a plist or try the example.</p></div>
             <div class="pipeline" aria-label="Validation layers">
-              <div><span class="layer-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 4H5v16h3m8-16h3v16h-3M10 9l-2 3 2 3m4-6 2 3-2 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><p><strong>A sound foundation</strong><small>Plist structure, types, and duplicate keys</small></p></div>
-              <div><span class="layer-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m12 3-7 3v6c0 5 7 9 7 9s7-4 7-9V6l-7-3Zm-3 9 2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><p><strong>The official once-over</strong><small>Schema and semantics with ocvalidate 1.0.8</small></p></div>
-              <div><span class="layer-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4M10 10h4v4h-4z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><p><strong>Your hardware in the picture</strong><small>Source-linked guidance for your selected profile</small></p></div>
+              <div><span class="layer-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 4H5v16h3m8-16h3v16h-3M10 9l-2 3 2 3m4-6 2 3-2 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><p><strong>Plist structure</strong></p></div>
+              <div><span class="layer-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m12 3-7 3v6c0 5 7 9 7 9s7-4 7-9V6l-7-3Zm-3 9 2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><p><strong>OpenCore validation</strong></p></div>
+              <div><span class="layer-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4M10 10h4v4h-4z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><p><strong>Hardware checks</strong></p></div>
             </div>
-            <p class="empty-tip"><svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.2"/><path d="M9 8v4m0-6v.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>A valid config isn’t a boot guarantee.<br>Every report makes its limits clear.</p>
           </div>
           <p id="filter-status" class="visually-hidden" role="status" aria-atomic="true"></p><div id="report" hidden></div>
         </section>
       </div>
-      <div class="window-footer"><span><span aria-hidden="true">◈</span> Independent. Open source.</span><a href="https://dortania.github.io/OpenCore-Install-Guide/" target="_blank" rel="noreferrer">Built on the Dortania guides <span aria-hidden="true">↗</span></a></div>
+      <div class="window-footer"><span>Open source</span><a href="https://dortania.github.io/OpenCore-Install-Guide/" target="_blank" rel="noreferrer">Dortania guides <span aria-hidden="true">↗</span></a></div>
     </div>
-    <section class="coverage" id="coverage" aria-labelledby="coverage-heading"><div class="coverage-intro"><span class="section-symbol" aria-hidden="true">↳</span><h2 id="coverage-heading">Clarity includes <br>knowing the limits.</h2></div><div class="coverage-grid"><article><h3>Inside your config</h3><p>Official OpenCore 1.0.8 validation, plus source-linked rules for selected desktop and Intel laptop families, firmware settings, and macOS targets.</p></article><article><h3>Outside the picture</h3><p>EFI files, actual BIOS state, ACPI contents, USB wiring, and boot logs need separate review. Keep a known-good EFI backup and verify every change.</p></article></div></section>
+    <details class="coverage" id="coverage"><summary>About these checks <svg class="chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="coverage-grid"><article><h3>Checked</h3><p>Plist structure, OpenCore 1.0.8 validation, and rules for supported desktop and Intel laptop profiles. Hardware and BIOS checks use your selections. GPU families are broad; verify your exact chip and framebuffer.</p></article><article><h3>Not checked</h3><p>EFI files, actual BIOS state, ACPI contents, USB wiring, and boot logs. This tool does not edit your config or guarantee a boot. Keep a backup EFI and verify changes.</p></article></div></details>
     <footer><span>Made by <a href="https://github.com/zeyadhost" target="_blank" rel="noreferrer">zeyadhost</a>. Not affiliated with Apple, Acidanthera, or Dortania.</span><div><a href="https://github.com/acidanthera/OpenCorePkg" target="_blank" rel="noreferrer">OpenCore ↗</a><a href="https://app.devin.ai/sessions/38cc40b799e448f6b39c956f64a171aa">Request changes ↗</a></div></footer>
   </main>
 </body>
