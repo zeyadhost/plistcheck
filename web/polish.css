@@ -1,0 +1,140 @@
+/* Skill pass: better-ui, better-accessibility, better-typography and mobile-native.
+   Structural borders stay flat. Feedback never moves diagnostic data. */
+:root {
+  --text-muted: #626a61;
+  --input-border: #899187;
+  --ease-feedback: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --duration-feedback: 150ms;
+  --radius: 8px;
+  -moz-osx-font-smoothing: grayscale;
+}
+body { font-size: .9375rem; line-height: 1.5; }
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+button, a, summary, input, select { touch-action: manipulation; }
+button, summary { user-select: none; }
+button, summary, input, select { min-height: 40px; }
+input, select {
+  border-color: var(--input-border);
+  font-size: .875rem;
+  height: auto;
+  padding-block: 11px;
+  border-radius: 4px;
+}
+input::placeholder { font-size: .8125rem; }
+label { font-size: .8125rem; }
+.optional { font-size: .6875rem; }
+.eyebrow { font-size: .6875rem; letter-spacing: .12em; }
+.lede { font-size: 1rem; }
+.tiny, .version, nav, .engine { font-size: .75rem; }
+.panel-heading { min-height: 70px; }
+.panel-heading h2 { font-size: .9375rem; }
+.panel-heading h2 > span { font-size: .75rem; }
+.label, .status-label { font-size: .625rem; letter-spacing: .04em; }
+.status-label { text-align: end; max-width: 45%; }
+.form-note, .version-note, .privacy { font-size: .75rem; }
+.form-note { margin-block: 22px; }
+.form-grid { row-gap: 22px; }
+.file-bottom { font-size: .6875rem; padding-bottom: 10px; }
+.text-button { font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; }
+.dropzone { position: relative; transition: none; }
+.dropzone input[type=file] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+.dropzone:focus-within { outline: 2px solid var(--accent); outline-offset: 4px; }
+.dropzone > span, .dropzone > strong { pointer-events: none; }
+.dropzone strong { font-size: .9375rem; }
+.dropzone > span:last-child { font-size: .6875rem; }
+.firmware > summary { font-size: .8125rem; align-items: center; }
+.firmware summary span { font-size: .6875rem; }
+.primary { min-height: 48px; font-size: .875rem; padding-inline-end: 14px; }
+.primary:disabled { opacity: .75; }
+.primary:active:not(:disabled) { transform: scale(.98); }
+.text-button:active, .filters button:active, .download:active { background: var(--soft); }
+.filters button, .download { font-size: .75rem; padding-inline: 10px; }
+.filters button[aria-pressed=true] { box-shadow: inset 0 0 0 1px var(--accent); }
+.count-grid strong { font-variant-numeric: tabular-nums; }
+.count-grid span { font-size: .75rem; }
+.report-heading > p:not(.eyebrow) { font-size: .75rem; }
+.report-heading .eyebrow { font-size: .625rem; }
+.profile-summary { overflow-wrap: anywhere; }
+.finding small { font-size: .6875rem; }
+.finding strong { font-size: .875rem; }
+.finding-body { font-size: .8125rem; }
+.finding-body a { display: inline-flex; align-items: center; min-height: 40px; font-size: .8125rem; text-decoration: underline; text-underline-offset: 3px; }
+.fix span { font-size: .625rem; }
+.native summary, .gaps summary { font-size: .8125rem; align-items: center; }
+.native-status, .native p, .gaps p, .gaps li { font-size: .75rem; }
+pre { font-size: .6875rem; overscroll-behavior: contain; }
+.empty-copy p { font-size: .875rem; }
+.pipeline strong { font-size: .875rem; }
+.pipeline small, .empty-tip p { font-size: .75rem; }
+.coverage article > span { font-size: .6875rem; }
+.coverage h3 { font-size: .9375rem; }
+.coverage article p { font-size: .8125rem; }
+footer { font-size: .75rem; align-items: center; }
+footer a { display: inline-flex; align-items: center; min-height: 32px; }
+.stale { opacity: 1; }
+.stale::before {
+  content: 'Inputs changed. These findings belong to your previous configuration. Run the check again.';
+  display: block;
+  margin: 22px 23px 0;
+  padding: 14px;
+  background: var(--warning-bg);
+  border-inline-start: 2px solid var(--warning);
+  color: var(--warning);
+  font-size: .8125rem;
+  line-height: 1.6;
+}
+.skip-link { position: absolute; inset-block-start: 10px; inset-inline-start: 15px; padding: 12px; background: var(--surface); border: 1px solid var(--input-border); z-index: 3; transform: translateY(-200%); }
+.skip-link:focus { transform: none; }
+/* Hover is capability-gated so touch does not retain a false selected state. */
+@media (hover: none) {
+  .dropzone:hover:not(.has-file):not(.dragging) { background: var(--surface); border-color: var(--border); }
+  .primary:hover { background: var(--primary-action); }
+  a:hover { text-decoration: none; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .primary { transition: transform var(--duration-feedback) var(--ease-feedback), background-color var(--duration-feedback) ease; }
+  .finding summary:hover, .native summary:hover, .gaps summary:hover { background: var(--soft); }
+  .filters button:hover:not([aria-pressed=true]), .download:hover { background: var(--bg); }
+}
+@media (pointer: coarse) {
+  input, select { font-size: 1rem; }
+  button, summary, input, select { min-height: 44px; }
+  .primary { min-height: 50px; }
+}
+@media (max-width: 1050px) and (min-width: 851px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .panel-heading { flex-wrap: wrap; }
+}
+@media (max-width: 570px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .panel-heading { flex-wrap: wrap; }
+  .label, .status-label { font-size: .625rem; }
+  .form-grid label, .firmware-grid label { font-size: .8125rem; }
+  .firmware > summary { flex-wrap: wrap; gap: 4px; }
+  .firmware-grid { grid-template-columns: 1fr; gap: 16px; }
+  .filters { gap: 2px; }
+  .filters button, .download { font-size: .6875rem; padding-inline: 8px; }
+  .file-bottom { align-items: start; flex-wrap: wrap; padding-bottom: 16px; }
+  .code-line { font-size: .5625rem; }
+  .report-heading h3 { font-size: 1.5rem; }
+  .primary { padding-inline-end: 14px; }
+  .topbar { padding-inline: max(18px, env(safe-area-inset-left)); }
+  main { padding-inline: max(15px, env(safe-area-inset-left)); padding-bottom: env(safe-area-inset-bottom); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .primary:active:not(:disabled) { transform: none; }
+}
+@media (forced-colors: active) {
+  :focus-visible, .dropzone:focus-within { outline-color: Highlight; }
+  .filters button[aria-pressed=true] { border: 1px solid Highlight; }
+}

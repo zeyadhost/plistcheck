@@ -8,7 +8,7 @@ let reportRevision = -1;
 let severity = 'all';
 const escape = (text) => String(text ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-function error(message) { $('#form-error').textContent = message; $('#form-error').hidden = !message; }
+function error(message) { $('#form-error').textContent = message; $('#form-error').hidden = !message; $('#file').setAttribute('aria-invalid', message ? 'true' : 'false'); }
 function stale() {
   revision += 1;
   if (currentReport) { $('#result-status').textContent = 'INPUT CHANGED · RUN AGAIN'; $('#report').classList.add('stale'); }
@@ -23,7 +23,6 @@ function setFile(file) {
   error(''); stale();
 }
 $('#file').addEventListener('change', event => setFile(event.target.files[0]));
-$('#dropzone').addEventListener('keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); $('#file').click(); } });
 for (const event of ['dragenter', 'dragover']) $('#dropzone').addEventListener(event, e => { e.preventDefault(); $('#dropzone').classList.add('dragging'); });
 for (const event of ['dragleave', 'drop']) $('#dropzone').addEventListener(event, e => { e.preventDefault(); $('#dropzone').classList.remove('dragging'); });
 $('#dropzone').addEventListener('drop', event => setFile(event.dataTransfer.files[0]));
@@ -46,7 +45,7 @@ $('#demo').addEventListener('click', async () => {
 form.addEventListener('submit', event => { event.preventDefault(); runCheck(); });
 async function runCheck() {
   if (running) return;
-  if (!selectedFile) { error('Add a config.plist, or try the example first.'); $('#dropzone').focus(); return; }
+  if (!selectedFile) { error('Add a config.plist, or try the example first.'); $('#file').focus(); return; }
   running = true; error('');
   const currentRevision = revision;
   const data = new FormData(form);
@@ -60,7 +59,7 @@ async function runCheck() {
     if (!response.ok) throw new Error(result.error || 'The check failed. Please try again.');
     if (revision !== currentRevision) { $('#result-status').textContent = 'INPUT CHANGED · RUN AGAIN'; return; }
     currentReport = result; reportRevision = currentRevision; severity = 'all'; renderReport();
-    if (matchMedia('(max-width: 850px)').matches) $('#results').scrollIntoView({behavior:'smooth', block:'start'});
+    if (matchMedia('(max-width: 850px)').matches) $('#results').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block:'start'});
   } catch (e) { error(e.message || 'Could not reach the checker. Please try again.'); $('#result-status').textContent = 'CHECK NOT COMPLETED'; }
   finally { running = false; $('#run').disabled = false; $('#run').innerHTML = 'Check configuration <span>↗</span>'; }
 }
@@ -77,7 +76,7 @@ function renderReport() {
   <div class="findings">${r.findings.filter(f => severity === 'all' || f.severity === severity).map(f => `<details class="finding ${escape(f.severity)}"><summary><span class="severity-mark">${f.severity === 'error' ? '×' : f.severity === 'warning' ? '!' : 'i'}</span><span><small>${escape(f.path)}</small><strong>${escape(f.title)}</strong></span><i>+</i></summary><div class="finding-body"><p>${escape(f.detail)}</p><div class="fix"><span>WHAT TO DO</span><p>${escape(f.fix)}</p></div><a href="${escape(f.source)}" target="_blank" rel="noreferrer">Read the source ↗</a></div></details>`).join('') || '<p class="no-findings">No findings in this category. Review the coverage gaps below.</p>'}</div>
   <details class="native"><summary><span>Official ocvalidate output</span><span class="native-status">${escape(r.native.status)} ↗</span></summary><p>Native issue counts can include several diagnostics. The error card above groups them into one finding.</p><pre>${escape(r.native.output)}</pre></details>
   <details class="gaps" open><summary>Not checked — read before you boot <span>↗</span></summary><ul>${r.gaps.map(g => `<li>${escape(g)}</li>`).join('')}</ul><p>No automatic fixes. No boot guarantee. Keep a backup EFI and verify every change.</p></details>`;
-  document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { severity = button.dataset.filter; renderReport(); }));
+  document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { severity = button.dataset.filter; renderReport(); document.querySelector(`[data-filter="${severity}"]`).focus({preventScroll:true}); }));
   $('#download').addEventListener('click', () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(currentReport,null,2)],{type:'application/json'}));
     const a = document.createElement('a'); a.href = url; a.download = 'plistcheck-report.json'; a.click();
