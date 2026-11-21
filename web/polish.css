@@ -131,6 +131,11 @@ footer a { display: inline-flex; align-items: center; min-height: 32px; }
   .topbar { padding-inline: max(18px, env(safe-area-inset-left)); }
   main { padding-inline: max(15px, env(safe-area-inset-left)); padding-bottom: env(safe-area-inset-bottom); }
 }
+@media (max-width: 380px) {
+  .topbar .version { display: none; }
+  .topbar { column-gap: 16px; }
+  .topbar nav a { white-space: nowrap; }
+}
 @media (prefers-reduced-motion: reduce) {
   .primary:active:not(:disabled) { transform: none; }
 }
