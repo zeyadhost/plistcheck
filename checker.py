@@ -9,6 +9,8 @@ from pathlib import Path
 
 from defusedxml import ElementTree
 
+import amd
+
 VERSION = "1.0.8"
 ROOT = Path(__file__).resolve().parent
 GUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
@@ -27,9 +29,21 @@ class ConfigError(ValueError):
 def parse_config(data):
     if len(data) > 2 * 1024 * 1024:
         raise ConfigError("Use a config.plist smaller than 2 MB, not a full EFI archive.")
+    if not data.strip():
+        raise ConfigError("This file is empty. Choose a non-empty OpenCore config.plist.")
+    for signature, kind in ((b"%PDF", "a PDF"), (b"\x89PNG", "an image"), (b"\xff\xd8\xff", "an image"),
+                            (b"GIF8", "an image"), (b"PK\x03\x04", "a ZIP archive")):
+        if data.startswith(signature):
+            raise ConfigError(f"This is {kind}, not an OpenCore config. Upload config.plist from your EFI/OC folder.")
+    stripped = data.lstrip()
+    if not data.startswith(b"bplist") and not stripped.startswith((b"<", b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff")):
+        kind = "JSON" if stripped.startswith((b"{", b"[")) else "plain text or another file format"
+        raise ConfigError(f"This looks like {kind}. Choose OpenCore's XML or binary config.plist, not a text or JSON export.")
     try:
         if not data.startswith(b"bplist"):
             tree = ElementTree.fromstring(data, forbid_entities=True, forbid_external=True)
+            if tree.tag != "plist":
+                raise ConfigError("This XML is not an Apple property list. Choose OpenCore's config.plist, not a web page or another XML file.")
             stack = [(tree, 0)]
             while stack:
                 node, depth = stack.pop()
@@ -60,11 +74,13 @@ def parse_config(data):
                 stack.extend((v, depth + 1) for v in obj.values())
             elif isinstance(obj, list):
                 stack.extend((v, depth + 1) for v in obj)
+        if not {"ACPI", "Booter", "DeviceProperties", "Kernel", "Misc", "NVRAM", "PlatformInfo", "UEFI"}.intersection(result):
+            raise ConfigError("This is a valid property list, but it has no OpenCore sections. Choose EFI/OC/config.plist, not an application's Info.plist or another settings file.")
         return result
     except ConfigError:
         raise
     except Exception as error:
-        raise ConfigError("This is not a valid XML or binary property list. Export it again with ProperTree.") from error
+        raise ConfigError("This property list is malformed or damaged (XML syntax, binary data or a value type is invalid). Choose an intact OpenCore config.plist, or re-save that config with ProperTree.") from error
 
 
 def profile_from(form):
@@ -80,6 +96,10 @@ def profile_from(form):
         raise ConfigError(f"This release checks OpenCore {VERSION} only. Use the validator matching your installed version.")
     for field in ("cpu_model", "gpu_model", "board"):
         profile[field] = str(form.get(field, ""))[:120]
+    cores = str(form.get("cpu_cores", "")).strip()
+    if cores and (not re.fullmatch(r"[0-9]{1,3}", cores) or not 1 <= int(cores) <= 255):
+        raise ConfigError("Enter 1–255 physical CPU cores, not the thread count, or leave it unknown.")
+    profile["cpu_cores"] = int(cores) if cores else None
     return profile
 
 
@@ -184,14 +204,41 @@ def analyze(config, profile):
     check("ec-usbx", any("ec" in p for p in acpi) and any("usbx" in p for p in acpi), "EC / USB power SSDTs are not identifiable", "ACPI → Add", "Modern desktops generally need an EC fix and USB power properties. Custom SSDTs may already provide these.", "Verify your ACPI tables against Dortania's EC and USBX guidance.")
     check("awac", any("awac" in p or "rtc0" in p for p in acpi), "Check the board's RTC / AWAC fix", "ACPI → Add", "Many 300-series boards need SSDT-AWAC or SSDT-RTC0; firmware inspection determines which.", "Inspect your ACPI tables before adding an AWAC/RTC fix.", applicable=profile["chipset"] in ("z390", "300", "z370"))
     check("pmc", any("pmc" in p for p in acpi), "Check native NVRAM support on this chipset", "ACPI → Add", "True 300-series boards other than Z370 may need SSDT-PMC. A filename check cannot prove firmware behavior.", "Test NVRAM persistence and inspect whether SSDT-PMC is needed.", applicable=profile["chipset"] in ("z390", "300"))
-    check("cpur", any("cpur" in p for p in acpi), "Check SSDT-CPUR for B550 / A520", "ACPI → Add", "Dortania lists SSDT-CPUR for B550 and A520 CPU definitions.", "Verify the board requires SSDT-CPUR, then add the matching table.", applicable=cpu == "zen" and profile["chipset"] == "b550-a520")
+    check("cpur", any("cpur" in p for p in acpi), "Check CPU definitions on B550 / A520", "ACPI → Add", "Dortania lists SSDT-CPUR for B550/A520 CPU definitions. This is only a filename hint; custom-named tables may already contain the fix.", "For B550/A520, inspect the firmware CPU definitions against the linked SSDT-CPUR source. Add the table only if that fix is absent; an enabled custom-named equivalent does not need renaming.", link=GUIDE + "AMD/zen.html#acpi", applicable=cpu == "zen" and profile["chipset"] == "b550-a520")
     check("cfglock", q("AppleXcpmCfgLock") is True, "CFG-Lock is enabled without the XCPM workaround", "Kernel → Quirks → AppleXcpmCfgLock", "You reported CFG-Lock enabled. This can prevent CPU power management from initializing.", "Prefer disabling CFG-Lock in BIOS; otherwise enable AppleXcpmCfgLock.", "error", applicable=modern_intel and profile["cfg_lock"] == "enabled")
     check("vtd", q("DisableIoMapper") is True or "dart=0" in boot.split(), "VT-d is enabled without an I/O mapper workaround", "Kernel → Quirks → DisableIoMapper", "The selected BIOS state may need DisableIoMapper; a deliberately configured DMAR table can be an exception.", "Review your DMAR/IOMMU setup; otherwise enable DisableIoMapper or disable VT-d.", applicable=modern_intel and profile["vt_d"] == "enabled")
     check("rebar", get(config, "Booter/Quirks/ResizeAppleGpuBars") == 0, "Resizable BAR is enabled without the macOS workaround", "Booter → Quirks → ResizeAppleGpuBars", "With Resizable BAR enabled in firmware, Dortania recommends ResizeAppleGpuBars = 0.", "Set ResizeAppleGpuBars to 0, or disable Resizable BAR in firmware.", "error", applicable=profile["rebar"] == "enabled")
     check("z390services", get(config, "Booter/Quirks/ProtectUefiServices") is True, "Z390 firmware services are not protected", "Booter → Quirks → ProtectUefiServices", "Dortania recommends this quirk on Z390 boards.", "Enable ProtectUefiServices and verify against your firmware.", applicable=profile["chipset"] == "z390")
     for field, path in [("DummyPowerManagement", "Kernel/Emulate/"), ("ProvideCurrentCpuInfo", "Kernel/Quirks/")]:
         check("amd-" + field, get(config, path + field) is True, f"AMD Zen needs {field}", (path + field).replace("/", " → "), "Dortania's AMD Zen configuration enables this option.", f"Set {field} to true for the selected AMD Zen profile.", "error", applicable=cpu == "zen")
-    check("amd-patches", bool(entries(config, "Kernel/Patch", kernel_range)), "No AMD kernel patches cover the selected macOS range", "Kernel → Patch", "AMD Zen requires version-appropriate AMD Vanilla patches, including CPU core-count edits.", "Apply the current AMD Vanilla patches for your CPU and macOS version; this check does not validate their contents.", "error", "https://github.com/AMD-OSX/AMD_Vanilla", applicable=cpu == "zen")
+    amd_gap = None
+    if cpu == "zen":
+        try:
+            result = amd.inspect_patches(get(config, "Kernel/Patch", []), kernel_range, profile["cpu_cores"])
+            check("amd-patches", result["recognized"] > 0, "No recognized AMD Vanilla patches cover this macOS", "Kernel → Patch",
+                  "An unrelated patch or an edited comment cannot prove AMD support. This compares actual patch bytes and operation fields against the pinned AMD Vanilla reference.",
+                  "Import the linked reference patch set, enable the required entries and edit the physical core count.", "error", amd.SOURCE)
+            check("amd-required-patches", not result["missing"], "Required AMD reference patches are missing or modified", "Kernel → Patch",
+                  "Missing, disabled, wrong-identifier, modified or out-of-range reference operations: " + "; ".join(result["missing"]),
+                  "Compare these operations with the linked reference for the selected macOS. Custom or newer patch sets require independent review; they are not certified by this checker.", "error", amd.SOURCE)
+            check("amd-core-count", not result["core_errors"], "AMD patch core count is unset or does not match", "Kernel → Patch → Replace",
+                  "; ".join(result["core_errors"]), "Set the second byte of the applicable cpuid_cores_per_package Replace values to your physical core count in hexadecimal, not the thread count.", "error", amd.SOURCE + "#read-me-first")
+            check("amd-patch-ranges", not result["range_errors"], "AMD patch kernel bounds extend beyond the reference", "Kernel → Patch → MinKernel / MaxKernel",
+                  "; ".join(result["range_errors"]), "Restore the reference bounds. Patches for different point releases must not run together outside their intended ranges.", "error", amd.SOURCE)
+            check("amd-cores-unknown", profile["cpu_cores"] is not None, "Physical CPU core count is unknown", "Hardware → CPU cores",
+                  "Zero placeholders are detected, but nonzero replacements cannot be verified against your hardware without its physical core count.",
+                  "Enter the physical core count from your CPU specifications and run again. Do not use the thread count.", "warning", amd.SOURCE + "#read-me-first")
+            if profile["cpu_cores"] is None:
+                amd_gap = "AMD physical core count is unknown; nonzero core-count replacements cannot be verified against your CPU."
+        except (OSError, ValueError, KeyError, plistlib.InvalidFileException):
+            amd_gap = "Verified AMD Vanilla reference unavailable: patch bytes, required groups and core edits were not checked. Run setup_opencore.py."
+        for field in ("AppleCpuPmCfgLock", "AppleXcpmCfgLock", "AppleXcpmExtraMsrs"):
+            check("amd-intel-" + field, q(field) is not True, f"Intel-only {field} is enabled on AMD", "Kernel → Quirks → " + field,
+                  "Dortania's AMD Zen profile leaves this Intel power-management quirk disabled.", "Disable this quirk for the selected AMD Zen profile.", link=source + "#quirks")
+        for field in ("Cpuid1Data", "Cpuid1Mask"):
+            value = get(config, "Kernel/Emulate/" + field, b"")
+            check("amd-intel-" + field, isinstance(value, bytes) and not any(value), f"Intel CPUID emulation remains in {field}", "Kernel → Emulate → " + field,
+                  "AMD Zen does not use Intel CPUID spoofing. The guide leaves these fields blank/zero.", "Clear the Intel CPUID emulation value for the selected AMD profile.", link=source + "#emulate")
     gpu_source = "https://dortania.github.io/GPU-Buyers-Guide/"
     check("gpu-unsupported", profile["gpu"] not in ("intel-xe", "nvidia-turing", "amd-navi24"), "The selected GPU family has no native macOS acceleration", "Hardware → Graphics", "Intel Xe, NVIDIA Turing and later, and AMD Navi 24 are not natively supported by macOS.", "Use a supported GPU or disable this GPU and use a supported alternative. A plist edit cannot add a missing driver.", "error", gpu_source)
     check("gpu-maxwell", profile["gpu"] != "nvidia-maxwell", "NVIDIA Maxwell / Pascal is unsupported on this macOS", "Hardware → Graphics", "NVIDIA web drivers stop at macOS High Sierra, older than every target offered here.", "Use a supported graphics device for this macOS version.", "error", gpu_source)
@@ -235,11 +282,13 @@ def analyze(config, profile):
     if any(profile[k] == "unknown" for k in ("cfg_lock", "vt_d", "rebar")):
         gaps.append("Some BIOS settings are unknown; the corresponding conditional checks were skipped.")
     if cpu == "zen":
-        gaps.append("AMD patch contents, per-core edits and target kernel ranges were not validated.")
+        gaps.append("AMD kernel patches are compared with pinned reference " + amd.COMMIT[:12] + "; optional PAT choices, board/Zen-4-specific IOPCI patches, custom patch sets and actual kernel execution still need manual review.")
+    if amd_gap:
+        gaps.insert(0, amd_gap)
     if native["status"] == "unavailable":
         gaps.insert(0, "Official validator unavailable: schema and semantic coverage is incomplete.")
     counts = {s: sum(f["severity"] == s for f in findings) for s in ("error", "warning", "info")}
     return {"version": VERSION, "profile": profile, "findings": findings, "counts": counts, "native": native,
             "checks": checks, "checked": sum(c["status"] != "skipped" for c in checks),
             "passed": sum(c["status"] == "passed" for c in checks), "skipped": sum(c["status"] == "skipped" for c in checks),
-            "gaps": gaps, "status": "incomplete" if native["status"] == "unavailable" else "issues" if counts["error"] or counts["warning"] else "no-known-issues"}
+            "gaps": gaps, "status": "incomplete" if native["status"] == "unavailable" or amd_gap else "issues" if counts["error"] or counts["warning"] else "no-known-issues"}

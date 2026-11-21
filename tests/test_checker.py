@@ -49,7 +49,8 @@ def test_real_validator_and_hardware_findings(client):
     assert response.status_code == 200
     result = response.json
     assert result["native"]["status"] != "unavailable"
-    assert {"xhci", "cfglock", "dmg", "awac", "pmc"} <= {f["id"] for f in result["findings"]}
+    assert {"xhci", "cfglock", "awac", "pmc"} <= {f["id"] for f in result["findings"]}
+    assert result["native"]["status"] == "passed"
     assert result["checked"] + result["skipped"] == len(result["checks"])
     assert all(f["source"].startswith("https://") for f in result["findings"])
 
@@ -112,6 +113,17 @@ def test_deep_xml_rejected():
     data = b"<plist>" + b"<array>" * 66 + b"<true/>" + b"</array>" * 66 + b"</plist>"
     with pytest.raises(ConfigError, match="deeply"):
         parse_config(data)
+
+
+@pytest.mark.parametrize("data, message", [(b"", "empty"), (b"%PDF-1.4", "PDF"), (b"\x89PNG\r\n", "image"),
+    (b'{"Name":"example"}', "JSON"), (b"ordinary text", "plain text"), (b"PK\x03\x04", "ZIP"),
+    (b"<html><body>Not a config</body></html>", "not an Apple property list"),
+    (plistlib.dumps({"Name": "Example", "Enabled": True}), "no OpenCore sections"),
+    (plistlib.dumps({"Name": "Example"}, fmt=plistlib.FMT_BINARY), "no OpenCore sections")])
+def test_wrong_file_guidance(client, data, message):
+    response = client.post("/api/check", data={"config": (io.BytesIO(data), "config.plist")})
+    assert response.status_code == 400
+    assert message in response.json["error"]
 
 
 def test_out_of_range_kexts_and_patches_do_not_satisfy_presence_checks():

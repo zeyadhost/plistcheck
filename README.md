@@ -16,7 +16,7 @@ python setup_opencore.py
 gunicorn --bind 0.0.0.0:8000 --workers 2 --threads 2 --timeout 30 app:app
 ```
 
-Open `http://localhost:8000`. “Try an example” loads a deliberately imperfect, synthetic Coffee Lake/Z390 config and runs the checker without needing a real EFI. Never boot the demo.
+Open `http://localhost:8000`. “Try an example” loads a synthetic Coffee Lake/Z390 config that passes official validation but contains hardware-guidance issues. A pristine form gets the matching example profile; if you already edited hardware fields, those selections are preserved and the example notice explains the comparison. Never boot the demo.
 
 On Windows, activate `.venv\Scripts\activate` and use `flask --app app run --port 8000` for local development instead of Gunicorn. The production Docker image targets `linux/amd64`:
 
@@ -33,11 +33,13 @@ No frontend build, Node runtime, database, or credentials required. The frontend
 2. **Official validation:** the unmodified `ocvalidate` executable from OpenCore **1.0.8**, covering its schema, value constraints, patch consistency, kext ordering, and cross-setting semantics. Binary uploads are normalized to XML before running the tool. Raw diagnostics are available in the result; one grouped finding may represent several native issues.
 3. **Hardware-aware rules:** source-linked checks for Intel Haswell through Comet Lake desktops and AMD Zen, selected 300-series/B550/A520 chipset ACPI hints, reported BIOS state, GPU-family support boundaries, macOS-dependent USB settings, SMC/Lilu dependencies, SMBIOS placeholders, and security/debug settings.
 
-Only OpenCore 1.0.8 is supported. The config format cannot reliably reveal the installed bootloader version: the user must confirm that it matches. `setup_opencore.py` downloads the official release archive, verifies its pinned SHA-256, and installs the validator and sample into ignored `vendor/`. No validator binary is committed. A missing or timed-out validator produces **incomplete coverage**, never a schema pass.
+Only OpenCore 1.0.8 is supported. The config format cannot reliably reveal the installed bootloader version: verify that it matches the displayed validator version. `setup_opencore.py` downloads the official release archive and pinned AMD Vanilla reference, verifies their SHA-256 checksums, and installs them into ignored `vendor/`. No validator binary or patch set is committed. A missing or timed-out validator produces **incomplete coverage**, never a schema pass.
 
 ### What the profile means
 
 Selected CPU/GPU families, chipset, macOS, and BIOS options drive rules. Exact model names are optional labels, **not automatically decoded hardware**. Unknown BIOS states skip conditional checks. “AMD supported family” and “Intel pre-Xe” do not certify a specific GPU: device IDs, spoofing, macOS-specific support, and output wiring still need review. Intel 11th-gen or newer, legacy Intel, laptops, and unknown CPUs do not have generation-specific coverage.
+
+For AMD Zen, enter the physical CPU core count, not its thread count. Kernel patch bytes, identifiers, masks, operation fields and applicable kernel intervals are compared with AMD Vanilla commit `eaf52ef292abf4ebec899df6d48626569ba50cc6`. Missing/disabled/modified required reference operations, zero core-count placeholders, mismatches against the supplied core count, and widened point-release ranges are errors. Comments are not used as patch identity. Ventura's core-patch transition is checked across both required intervals. An unknown physical core count or unavailable verified reference leaves coverage incomplete. This is reference comparison, not a proof that patches match or execute against a particular kernel binary; custom/newer sets need independent review.
 
 SSDT and USB-map hints are filename heuristics and are warnings, not proof that a table or map is missing. Custom names and firmware-native alternatives can be valid. BIOS values are self-reported, not detected. A deliberately configured DMAR table can be an exception to the VT-d recommendation.
 
@@ -45,7 +47,7 @@ SSDT and USB-map hints are filename heuristics and are warnings, not proof that 
 
 - The actual EFI directory: file existence, binary versions, on-disk kext dependency metadata.
 - ACPI contents, firmware implementation, USB map correctness, network/audio device IDs.
-- AMD Vanilla patch contents, core-count replacements, and per-kernel applicability.
+- Optional AMD PAT alternatives, board/Zen-4-specific IOPCI patches, custom/newer AMD sets, and actual kernel-binary applicability/execution.
 - Exhaustive CPU/GPU/macOS/SMBIOS compatibility, BIOS state, serial validity with Apple, or boot success.
 - OpenCore releases other than 1.0.8, macOS later than Sequoia, and laptop-specific setup.
 
@@ -69,6 +71,6 @@ Tests exercise the real pinned validator alongside parser failures, malformed in
 
 - [OpenCorePkg 1.0.8](https://github.com/acidanthera/OpenCorePkg/releases/tag/1.0.8), [ocvalidate documentation](https://github.com/acidanthera/OpenCorePkg/tree/1.0.8/Utilities/ocvalidate), and [Configuration.pdf](https://github.com/acidanthera/OpenCorePkg/blob/1.0.8/Docs/Configuration.pdf). Upstream utilities and the sample remain under their upstream licenses; they are downloaded, not relicensed by this project.
 - [Dortania OpenCore Install Guide](https://dortania.github.io/OpenCore-Install-Guide/) and [GPU Buyers Guide](https://dortania.github.io/GPU-Buyers-Guide/). Desktop/AMD guidance reviewed against Install Guide commit `6680f2df86de1283083b0208e8a8042fa1952b2c`. The guide includes firmware-dependent exceptions; read each linked source before acting.
-- [AMD Vanilla patches](https://github.com/AMD-OSX/AMD_Vanilla).
+- [AMD Vanilla patches](https://github.com/AMD-OSX/AMD_Vanilla/tree/eaf52ef292abf4ebec899df6d48626569ba50cc6). Reference SHA-256: `4bc820109b3d020c3c547fa23c49e0098e4f4a2c625ed6184dd54e390e84e1ab`. Downloaded for data comparison only; never executed or represented as this project's own patches.
 
 Independent project by [zeyadhost](https://github.com/zeyadhost), not affiliated with Apple, Acidanthera, or Dortania.

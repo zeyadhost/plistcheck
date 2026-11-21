@@ -66,13 +66,13 @@ def demo_config():
          "ExecutablePath": "Contents/MacOS/" + name, "MaxKernel": "", "MinKernel": "", "PlistPath": "Contents/Info.plist"}
         for name in ("Lilu", "VirtualSMC", "WhateverGreen")
     ]
-    config["UEFI"]["Drivers"] = [{"Arguments": "", "Comment": "", "Enabled": True, "LoadEarly": False, "Path": name} for name in ("OpenRuntime.efi", "HfsPlus.efi")]
+    config["UEFI"]["Drivers"] = [{"Arguments": "", "Comment": "", "Enabled": True, "HideVerbose": False, "LoadEarly": False, "Path": name} for name in ("OpenRuntime.efi", "HfsPlus.efi")]
     config["ACPI"]["Add"] = [{"Comment": "Demo only", "Enabled": True, "Path": name} for name in ("SSDT-PLUG.aml", "SSDT-EC-USBX.aml")]
     config["Kernel"]["Quirks"]["DisableLinkeditJettison"] = True
     config["Kernel"]["Quirks"]["XhciPortLimit"] = True
     config["Kernel"]["Quirks"]["AppleXcpmCfgLock"] = False
     config["Misc"]["Security"]["Vault"] = "Optional"
-    config["Misc"]["Security"]["DmgLoading"] = "Any"
+    config["Misc"]["Security"]["DmgLoading"] = "Signed"
     config["NVRAM"]["Add"][GUID]["boot-args"] = "-v keepsyms=1 debug=0x100"
     config["NVRAM"]["Add"][GUID]["csr-active-config"] = bytes(4)
     config["PlatformInfo"]["Generic"]["SystemProductName"] = "iMac19,1"
