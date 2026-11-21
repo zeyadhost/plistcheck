@@ -73,7 +73,7 @@ $('#demo').addEventListener('click', async () => {
     if (revision !== requestedRevision || running) return;
     setFile(new File([blob], 'example-coffee-lake.plist', {type: 'application/x-plist'}), true);
     $('#file').value = '';
-    const defaults = {cpu:'coffee-lake',cpu_model:'Intel Core i7-9700K',gpu:'amd-supported',gpu_model:'Radeon RX 580',chipset:'z390',board:'Gigabyte Z390 AORUS PRO',macos:'14',cfg_lock:'enabled',vt_d:'unknown',rebar:'disabled'};
+    const defaults = {cpu:'coffee-lake',cpu_model:'Intel Core i7-9700K',gpu:'amd-polaris-vega',gpu_model:'Radeon RX 580',chipset:'z390',board:'Gigabyte Z390 AORUS PRO',macos:'14',cfg_lock:'enabled',vt_d:'unknown',rebar:'disabled'};
     if (!profileEdited) {
       for (const [key, value] of Object.entries(defaults)) form.elements[key].value = value;
     }
