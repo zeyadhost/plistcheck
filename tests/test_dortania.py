@@ -1,0 +1,199 @@
+import copy
+import plistlib
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+import amd
+from app import demo_config
+from checker import GUID, analyze, native_validate, profile_from
+
+
+FIXTURES = Path(__file__).parent / "fixtures" / "dortania"
+PROFILES = [
+    ("coffee-lake", "amd-polaris-vega", "z390", "14", "enabled", "enabled", "enabled"),
+    ("coffee-lake", "amd-polaris-vega", "z390", "14", "enabled", "enabled", "enabled"),
+    ("haswell", "intel-supported", "other", "12", "disabled", "disabled", "disabled"),
+    ("haswell", "intel-supported", "other", "14", "enabled", "disabled", "disabled"),
+    ("comet-lake", "amd-navi", "400", "13", "disabled", "disabled", "disabled"),
+    ("comet-lake", "amd-navi", "400", "13", "disabled", "disabled", "disabled"),
+    ("zen", "amd-navi", "b550-a520", "14", "unknown", "disabled", "disabled"),
+    ("zen", "amd-navi", "b550-a520", "14", "unknown", "enabled", "disabled"),
+    ("kaby-lake", "intel-supported", "other", "13", "disabled", "disabled", "disabled"),
+    ("kaby-lake", "intel-supported", "other", "13", "disabled", "disabled", "disabled"),
+    ("broadwell", "intel-supported", "other", "12", "disabled", "disabled", "disabled"),
+]
+MISSED = {
+    2: {"smbios", "vault", "booter-memory", "gpu-polaris-pikera"},
+    4: {"smbios", "gpu-legacy-intel", "igpu-platform-id", "write-unprotector"},
+    6: {"setup-virtual-map", "z390services", "awac", "smbios", "igpu-headless", "gpu-navi"},
+    8: {"setup-virtual-map", "smbios", "amd-plug", "amd-intel-acpi", "amd-smc-plugins", "amd-cfglock", "amd-iommu"},
+    10: {"igpu-platform-id", "smbios"},
+}
+
+
+def fixture_case(number):
+    config = plistlib.loads(next(FIXTURES.glob(f"{number:02}-*.plist")).read_bytes())
+    fields = dict(zip(("cpu", "gpu", "chipset", "macos", "cfg_lock", "vt_d", "rebar"), PROFILES[number - 1]))
+    if fields["cpu"] == "zen":
+        fields["cpu_cores"] = "8"
+    if number == 7:
+        config["Kernel"]["Patch"] = copy.deepcopy(amd.reference_patches())
+        for entry in config["Kernel"]["Patch"]:
+            if "cpuid_cores_per_package" in entry["Comment"]:
+                entry["Replace"] = entry["Replace"][:1] + b"\x08" + entry["Replace"][2:]
+    profile = profile_from(fields)
+    return config, profile
+
+
+@pytest.mark.parametrize("number", range(1, 12))
+def test_audit_fixture(number):
+    result = analyze(*fixture_case(number))
+    assert result["native"]["status"] != "unavailable"
+    if number in MISSED:
+        assert MISSED[number] <= {f["id"] for f in result["findings"]}
+    else:
+        assert not [f for f in result["findings"] if f["severity"] in ("error", "warning")]
+
+
+def test_empty_uuid_is_only_placeholder_finding():
+    config, profile = fixture_case(1)
+    config["PlatformInfo"]["Generic"]["SystemUUID"] = ""
+    ids = {f["id"] for f in analyze(config, profile)["findings"]}
+    assert "identity-SystemUUID" in ids
+    assert "uuid" not in ids
+    config["PlatformInfo"]["Generic"]["SystemUUID"] = "malformed"
+    assert "uuid" in {f["id"] for f in analyze(config, profile)["findings"]}
+
+
+def test_demo_driver_schema():
+    result = native_validate(demo_config())
+    assert result["status"] == "passed"
+    assert "Missing key" not in result["output"]
+
+
+def test_native_covers_dependency_checks_with_fallback():
+    config, profile = fixture_case(2)
+    native = native_validate(config)
+    assert "DisableLinkeditJettison is not enabled" in native["output"]
+    assert "Parent (Lilu.kext)" in native["output"]
+    result = analyze(config, profile)
+    assert all(c["status"] == "skipped" for c in result["checks"] if c["id"] == "lilu-quirk" or c["id"].startswith("order-"))
+    with patch("checker.native_validate", return_value={"status": "unavailable", "output": "", "issues": 0}):
+        ids = {f["id"] for f in analyze(config, profile)["findings"]}
+    assert {"lilu-quirk", "order-WhateverGreen.kext"} <= ids
+
+
+@pytest.mark.parametrize("change", [{"Enabled": False}, {"MaxKernel": "22.99.99"}, {"MinKernel": "24.0.0"}])
+def test_inactive_lilu_dependencies_not_hidden_by_native_validator(change):
+    config, profile = fixture_case(1)
+    lilu = next(e for e in config["Kernel"]["Add"] if e["BundlePath"] == "Lilu.kext")
+    lilu.update(change)
+    result = analyze(config, profile)
+    assert result["native"]["status"] in ("passed", "failed")
+    assert "order-WhateverGreen.kext" in {f["id"] for f in result["findings"]}
+
+
+@pytest.mark.parametrize("cpu,macos,model,expected", [
+    ("haswell", "12", "iMac14,4", "error"),
+    ("haswell", "11.3", "iMac14,4", None),
+    ("haswell", "12", "iMac15,1", "error"),
+    ("haswell", "12", "iMac16,2", None),
+    ("haswell", "13", "iMac18,3", None),
+    ("skylake", "14", "iMac19,1", None),
+    ("kaby-lake", "14", "iMac19,2", None),
+    ("comet-lake", "13", "iMac20,2", None),
+    ("zen", "14", "MacPro7,1", None),
+    ("zen", "14", "MacPro6,1", "error"),
+    ("coffee-lake", "14", "iMacPro1,1", "warning"),
+    ("other", "14", "iMac14,4", None),
+    ("haswell", "14", 1, None),
+    ("haswell", "14", "", "warning"),
+])
+def test_smbios_family_and_support(cpu, macos, model, expected):
+    config, profile = fixture_case(1)
+    profile.update(cpu=cpu, macos=macos)
+    config["PlatformInfo"]["Generic"]["SystemProductName"] = model
+    findings = [f["severity"] for f in analyze(config, profile)["findings"] if f["id"] == "smbios"]
+    assert findings == ([] if expected is None else [expected])
+
+
+@pytest.mark.parametrize("macos,includes_macpro6", [("12", True), ("13", False), ("15", False)])
+def test_zen_recommendations_exclude_expired_models(macos, includes_macpro6):
+    config, profile = fixture_case(8)
+    profile["macos"] = macos
+    finding = next(f for f in analyze(config, profile)["findings"] if f["id"] == "smbios")
+    assert ("MacPro6,1" in finding["fix"]) == includes_macpro6
+    assert "MacPro7,1" in finding["fix"]
+    assert "iMacPro1,1" in finding["fix"]
+
+
+@pytest.mark.parametrize("value,expected", [(None, "error"), (b"wrong", "warning"), (bytes.fromhex("00001259"), None)])
+def test_display_framebuffer_missing_wrong_and_correct(value, expected):
+    config, profile = fixture_case(9)
+    properties = config["DeviceProperties"]["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"]
+    if value is None:
+        properties.pop("AAPL,ig-platform-id")
+    else:
+        properties["AAPL,ig-platform-id"] = value
+    findings = [f["severity"] for f in analyze(config, profile)["findings"] if f["id"] == "igpu-platform-id"]
+    assert findings == ([] if expected is None else [expected])
+
+
+@pytest.mark.parametrize("macos,value,expected", [("12", "00001219", False), ("13", "00001259", False), ("14", "00001219", True)])
+def test_skylake_uses_kaby_framebuffer_on_ventura(macos, value, expected):
+    config, profile = fixture_case(9)
+    profile.update(cpu="skylake", macos=macos)
+    config["DeviceProperties"]["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"]["AAPL,ig-platform-id"] = bytes.fromhex(value)
+    findings = [f for f in analyze(config, profile)["findings"] if f["id"] == "igpu-platform-id"]
+    assert bool(findings) == expected
+    if findings:
+        assert "00001259" in findings[0]["fix"]
+
+
+@pytest.mark.parametrize("value,expected", [(None, False), (bytes.fromhex("07009B3E"), True), (bytes.fromhex("0300C89B"), False)])
+def test_headless_framebuffer_missing_wrong_and_correct(value, expected):
+    config, profile = fixture_case(5)
+    properties = config["DeviceProperties"]["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"]
+    if value is None:
+        properties.pop("AAPL,ig-platform-id", None)
+    else:
+        properties["AAPL,ig-platform-id"] = value
+    assert ("igpu-headless" in {f["id"] for f in analyze(config, profile)["findings"]}) == expected
+
+
+@pytest.mark.parametrize("write,rebuild,expected", [(True, False, set()), (False, True, {"write-unprotector"}), (True, True, {"booter-memory"}), (False, False, {"write-unprotector"})])
+def test_memory_map_strategies(write, rebuild, expected):
+    config, profile = fixture_case(3)
+    config["Booter"]["Quirks"].update(EnableWriteUnprotector=write, RebuildAppleMemoryMap=rebuild)
+    ids = {f["id"] for f in analyze(config, profile)["findings"]}
+    assert ids & {"booter-memory", "write-unprotector"} == expected
+
+
+@pytest.mark.parametrize("gpu", ["amd-supported", "amd-polaris-vega", "amd-navi"])
+def test_gpu_disable_includes_all_supported_amd_choices(gpu):
+    config, profile = fixture_case(1)
+    profile["gpu"] = gpu
+    config["NVRAM"]["Add"][GUID]["boot-args"] += " -wegnoegpu"
+    assert "gpu-disable" in {f["id"] for f in analyze(config, profile)["findings"]}
+
+
+def test_navi_advice_does_not_claim_native_navi22_support():
+    finding = next(f for f in analyze(*fixture_case(6))["findings"] if f["id"] == "gpu-navi")
+    assert "Navi 10/21/23" in finding["detail"]
+    assert "Navi 22 is not natively supported and needs NootRX" in finding["detail"]
+
+
+@pytest.mark.parametrize("value,present", [("pikera", True), (b"pikera", True), (b"pikera\0\0", True), ("", False), (b"other", False), (42, False), ({}, False)])
+@pytest.mark.parametrize("gpu", ["amd-navi", "amd-polaris-vega"])
+def test_pikera_device_property(value, present, gpu):
+    config, profile = fixture_case(6)
+    profile["gpu"] = gpu
+    config["NVRAM"]["Add"][GUID]["boot-args"] = ""
+    config["DeviceProperties"]["Add"]["PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)"] = {"agdpmod": value}
+    ids = {f["id"] for f in analyze(config, profile)["findings"]}
+    if gpu == "amd-navi":
+        assert ("gpu-navi" in ids) != present
+    else:
+        assert ("gpu-polaris-pikera" in ids) == present

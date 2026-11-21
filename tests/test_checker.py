@@ -67,7 +67,8 @@ def test_os_and_firmware_conditions():
 def test_kext_dependency_order_and_amd_patch_requirements():
     config = demo_config()
     config["Kernel"]["Add"].reverse()
-    assert "order-WhateverGreen.kext" in finding_ids(config)
+    with patch("checker.native_validate", return_value={"status": "unavailable", "output": "", "issues": 0}):
+        assert "order-WhateverGreen.kext" in finding_ids(config)
     assert {"amd-DummyPowerManagement", "amd-ProvideCurrentCpuInfo", "amd-patches"} <= finding_ids(config, cpu="zen")
 
 

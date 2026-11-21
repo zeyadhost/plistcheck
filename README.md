@@ -31,13 +31,13 @@ No frontend build, Node runtime, database, or credentials required. The frontend
 
 1. **Safe parsing:** XML and binary property lists, XML duplicate-key detection, entity/external-reference rejection, dictionary root validation, size/nesting/object limits.
 2. **Official validation:** the unmodified `ocvalidate` executable from OpenCore **1.0.8**, covering its schema, value constraints, patch consistency, kext ordering, and cross-setting semantics. Binary uploads are normalized to XML before running the tool. Raw diagnostics are available in the result; one grouped finding may represent several native issues.
-3. **Hardware-aware rules:** source-linked checks for Intel Haswell through Comet Lake desktops and AMD Zen, selected 300-series/B550/A520 chipset ACPI hints, reported BIOS state, GPU-family support boundaries, macOS-dependent USB settings, SMC/Lilu dependencies, SMBIOS placeholders, and security/debug settings.
+3. **Hardware-aware rules:** source-linked checks for Intel Haswell through Comet Lake desktops and AMD Zen, selected Intel 100–400-series and AMD B550/A520/X570/X470/B450/A320/TRx40 chipset options and ACPI hints, reported BIOS state, GPU-family support boundaries, macOS-dependent USB settings, SMC/Lilu dependencies, SMBIOS family and macOS support recommendations, DeviceProperties display/headless iGPU ids, platform Booter quirks, SMBIOS placeholders, and security/debug settings.
 
 Only OpenCore 1.0.8 is supported. The config format cannot reliably reveal the installed bootloader version: verify that it matches the displayed validator version. `setup_opencore.py` downloads the official release archive and pinned AMD Vanilla reference, verifies their SHA-256 checksums, and installs them into ignored `vendor/`. No validator binary or patch set is committed. A missing or timed-out validator produces **incomplete coverage**, never a schema pass.
 
 ### What the profile means
 
-Selected CPU/GPU families, chipset, macOS, and BIOS options drive rules. Exact model names are optional labels, **not automatically decoded hardware**. Unknown BIOS states skip conditional checks. “AMD supported family” and “Intel pre-Xe” do not certify a specific GPU: device IDs, spoofing, macOS-specific support, and output wiring still need review. Intel 11th-gen or newer, legacy Intel, laptops, and unknown CPUs do not have generation-specific coverage.
+Selected CPU/GPU families, chipset, macOS, and BIOS options drive rules. Exact model names are optional labels, **not automatically decoded hardware**. Unknown BIOS states skip conditional checks. “AMD other supported / not sure” (with separate Polaris/Vega and Navi choices) and “Intel pre-Xe” do not certify a specific GPU: device IDs, spoofing, macOS-specific support, and output wiring still need review. Intel 11th-gen or newer, legacy Intel, laptops, and unknown CPUs do not have generation-specific coverage.
 
 For AMD Zen, enter the physical CPU core count, not its thread count. Kernel patch bytes, identifiers, masks, operation fields and applicable kernel intervals are compared with AMD Vanilla commit `eaf52ef292abf4ebec899df6d48626569ba50cc6`. Missing/disabled/modified required reference operations, zero core-count placeholders, mismatches against the supplied core count, and widened point-release ranges are errors. Comments are not used as patch identity. Ventura's core-patch transition is checked across both required intervals. An unknown physical core count or unavailable verified reference leaves coverage incomplete. This is reference comparison, not a proof that patches match or execute against a particular kernel binary; custom/newer sets need independent review.
 
@@ -48,7 +48,7 @@ SSDT and USB-map hints are filename heuristics and are warnings, not proof that 
 - The actual EFI directory: file existence, binary versions, on-disk kext dependency metadata.
 - ACPI contents, firmware implementation, USB map correctness, network/audio device IDs.
 - Optional AMD PAT alternatives, board/Zen-4-specific IOPCI patches, custom/newer AMD sets, and actual kernel-binary applicability/execution.
-- Exhaustive CPU/GPU/macOS/SMBIOS compatibility, BIOS state, serial validity with Apple, or boot success.
+- Exhaustive CPU/GPU/macOS compatibility or unlisted SMBIOS combinations, BIOS state, serial validity with Apple, or boot success.
 - OpenCore releases other than 1.0.8, macOS later than Sequoia, and laptop-specific setup.
 
 The app never edits a config or offers a fake “fix everything” button. Keep a known-good EFI backup and validate each change.
