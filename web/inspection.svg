@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="330" viewBox="0 0 440 330" fill="none">
+  <g stroke="#1747df" stroke-width="1.5" opacity=".3"><path d="M8 42h65l31 31h37m-110 210h56l42-42m303-184h-68l-35 35M432 277h-80l-29-29"/><circle cx="8" cy="42" r="4"/><circle cx="31" cy="283" r="4"/><circle cx="432" cy="57" r="4"/><circle cx="432" cy="277" r="4"/></g>
+  <g transform="translate(91 28) rotate(8 130 135)">
+    <rect x="8" y="9" width="260" height="272" rx="8" fill="#18201b" opacity=".08"/>
+    <rect width="260" height="272" rx="8" fill="#1747df"/>
+    <path d="M0 47h260" stroke="#fff" stroke-opacity=".28"/>
+    <g fill="#f5f46b"><circle cx="20" cy="23" r="4"/><circle cx="34" cy="23" r="4" opacity=".55"/><circle cx="48" cy="23" r="4" opacity=".3"/></g>
+    <text x="237" y="28" text-anchor="end" fill="#fff" font-family="Arial,sans-serif" font-size="13">config.plist</text>
+    <g stroke="#fff" stroke-opacity=".35" stroke-width="2"><path d="M30 75h37l19 19v23m-56 72h35l22-22m141-92h-35l-20 20v22m56 73h-31l-23-23M101 64v29m27-29v29m27-29v29M102 185v28m26-28v28m27-28v28M59 122h24m-24 19h24m-24 19h24m88-38h26m-26 19h26m-26 19h26"/></g>
+    <rect x="83" y="94" width="89" height="89" rx="4" fill="#f5f46b"/>
+    <g stroke="#1747df" stroke-width="3"><path d="M108 115h-9v46h9m39-46h9v46h-9m-32-22 10 10 18-23"/></g>
+    <g fill="#fff" opacity=".65"><rect x="25" y="234" width="88" height="4" rx="2"/><rect x="25" y="245" width="52" height="4" rx="2"/></g>
+    <circle cx="226" cy="241" r="12" stroke="#fff" stroke-opacity=".5"/><path d="m221 241 4 4 6-8" stroke="#fff" stroke-width="1.5"/>
+  </g>
+  <g transform="translate(293 194) rotate(-10)"><circle cx="37" cy="37" r="42" fill="#f5f46b"/><circle cx="37" cy="37" r="34" stroke="#18201b" stroke-width="1.5"/><path d="M37 15v44m-22-22h44" stroke="#18201b" stroke-width="1.5"/><circle cx="37" cy="37" r="16" stroke="#18201b" stroke-width="1.5"/></g>
+</svg>
