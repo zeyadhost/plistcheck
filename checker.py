@@ -169,7 +169,7 @@ def analyze(config, profile):
     native = native_validate(config)
 
     def check(key, passed, title, path, detail, fix, severity="warning", link=source, applicable=True):
-        if native["status"] in ("passed", "failed") and (key == "lilu-quirk" or key.startswith("order-")):
+        if native["status"] in ("passed", "failed") and (key == "lilu-quirk" or (key.startswith("order-") and not inactive_lilu)):
             applicable = False
         checks.append({"id": key, "status": "skipped" if not applicable else "passed" if passed else "failed"})
         if applicable and not passed:
@@ -179,6 +179,10 @@ def analyze(config, profile):
     kernel_range = darwin_range(profile["macos"])
     kexts = [str(e.get("BundlePath", "")).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].lower()
              for e in entries(config, "Kernel/Add", kernel_range)]
+    kernel_add = get(config, "Kernel/Add", [])
+    inactive_lilu = "lilu.kext" not in kexts and isinstance(kernel_add, list) and any(
+        isinstance(e, dict) and str(e.get("BundlePath", "")).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].lower() == "lilu.kext"
+        for e in kernel_add)
     acpi = [str(e.get("Path", "")).lower() for e in entries(config, "ACPI/Add")]
     drivers = [str(e.get("Path", "")).lower() for e in entries(config, "UEFI/Drivers")]
     has = lambda name: name.lower() in kexts

@@ -76,6 +76,16 @@ def test_native_covers_dependency_checks_with_fallback():
     assert {"lilu-quirk", "order-WhateverGreen.kext"} <= ids
 
 
+@pytest.mark.parametrize("change", [{"Enabled": False}, {"MaxKernel": "22.99.99"}, {"MinKernel": "24.0.0"}])
+def test_inactive_lilu_dependencies_not_hidden_by_native_validator(change):
+    config, profile = fixture_case(1)
+    lilu = next(e for e in config["Kernel"]["Add"] if e["BundlePath"] == "Lilu.kext")
+    lilu.update(change)
+    result = analyze(config, profile)
+    assert result["native"]["status"] in ("passed", "failed")
+    assert "order-WhateverGreen.kext" in {f["id"] for f in result["findings"]}
+
+
 @pytest.mark.parametrize("cpu,macos,model,expected", [
     ("haswell", "12", "iMac14,4", None),
     ("haswell", "13", "iMac18,3", None),
