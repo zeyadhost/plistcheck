@@ -43,7 +43,7 @@ def fixture_case(number):
         for entry in config["Kernel"]["Patch"]:
             if "cpuid_cores_per_package" in entry["Comment"]:
                 entry["Replace"] = entry["Replace"][:1] + b"\x08" + entry["Replace"][2:]
-    profile = profile_from(fields)
+    profile = profile_from({"device": "desktop", **fields})
     return config, profile
 
 
@@ -71,6 +71,17 @@ def test_demo_driver_schema():
     result = native_validate(demo_config())
     assert result["status"] == "passed"
     assert "Missing key" not in result["output"]
+
+
+@pytest.mark.parametrize("chipset", ["z390", "400"])
+def test_known_desktop_chipset_is_checked_with_unknown_cpu(chipset):
+    config = demo_config()
+    config["ACPI"]["Add"] = []
+    config["Booter"]["Quirks"]["ProtectUefiServices"] = False
+    report = analyze(config, profile_from({"device": "desktop", "chipset": chipset}))
+    expected = {"awac", "z390services"} | ({"pmc"} if chipset == "z390" else set())
+    assert report["status"] == "incomplete"
+    assert expected <= {finding["id"] for finding in report["findings"]}
 
 
 def test_native_covers_dependency_checks_with_fallback():
@@ -129,7 +140,7 @@ def test_zen_recommendations_exclude_expired_models(macos, includes_macpro6):
     assert "iMacPro1,1" in finding["fix"]
 
 
-@pytest.mark.parametrize("value,expected", [(None, "error"), (b"wrong", "warning"), (bytes.fromhex("00001259"), None)])
+@pytest.mark.parametrize("value,expected", [(None, "error"), (b"1234", "warning"), (bytes.fromhex("00001259"), None)])
 def test_display_framebuffer_missing_wrong_and_correct(value, expected):
     config, profile = fixture_case(9)
     properties = config["DeviceProperties"]["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"]

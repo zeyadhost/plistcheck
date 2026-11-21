@@ -16,7 +16,11 @@ ROOT = Path(__file__).resolve().parent
 GUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 DOCS = f"https://github.com/acidanthera/OpenCorePkg/blob/{VERSION}/Docs/Configuration.pdf"
 GUIDE = "https://dortania.github.io/OpenCore-Install-Guide/"
-GENERATIONS = {"haswell", "broadwell", "skylake", "kaby-lake", "coffee-lake", "comet-lake", "zen", "other"}
+DESKTOP_CPUS = {"haswell", "broadwell", "skylake", "kaby-lake", "coffee-lake", "comet-lake", "zen"}
+LAPTOP_GUIDES = {cpu: cpu for cpu in ("haswell", "broadwell", "skylake", "kaby-lake", "coffee-lake")}
+LAPTOP_GUIDES.update({"whiskey-lake": "coffee-lake", "comet-lake": "coffee-lake-plus", "ice-lake": "icelake"})
+GENERATIONS = DESKTOP_CPUS | LAPTOP_GUIDES.keys() | {"other"}
+DEVICE_TYPES = {"desktop", "laptop", "other"}
 GPUS = {"amd-supported", "amd-polaris-vega", "amd-navi", "amd-navi24", "intel-supported", "intel-xe", "nvidia-kepler", "nvidia-maxwell", "nvidia-turing", "other"}
 CHIPSETS = {"other", "100-200", "z390", "300", "z370", "400", "b550-a520", "x570-b450", "trx40"}
 OS_VERSIONS = {"10.15", "11.0", "11.3", "12", "13", "14", "15"}
@@ -85,10 +89,10 @@ def parse_config(data):
 
 def profile_from(form):
     profile = {}
-    for field, allowed in [("cpu", GENERATIONS), ("gpu", GPUS), ("chipset", CHIPSETS), ("macos", OS_VERSIONS),
+    for field, allowed in [("device", DEVICE_TYPES), ("cpu", GENERATIONS), ("gpu", GPUS), ("chipset", CHIPSETS), ("macos", OS_VERSIONS),
                            ("cfg_lock", {"unknown", "enabled", "disabled"}), ("vt_d", {"unknown", "enabled", "disabled"}),
                            ("rebar", {"unknown", "enabled", "disabled"})]:
-        value = form.get(field, {"cpu": "other", "gpu": "other", "chipset": "other", "macos": "14"}.get(field, "unknown"))
+        value = form.get(field, {"device": "other", "cpu": "other", "gpu": "other", "chipset": "other", "macos": "14"}.get(field, "unknown"))
         if value not in allowed:
             raise ConfigError(f"Choose a valid {field.replace('_', ' ')} option.")
         profile[field] = value
@@ -142,6 +146,10 @@ def darwin_range(macos):
     return ((major, 4 if macos == "11.3" else 0, 0), (major, 3 if macos == "11.0" else 99, 99))
 
 
+def valid_platform_id(value):
+    return isinstance(value, bytes) and len(value) == 4
+
+
 def native_validate(config):
     executable = ROOT / "vendor" / ("ocvalidate.exe" if os.name == "nt" else "ocvalidate")
     if not executable.is_file():
@@ -163,9 +171,31 @@ def native_validate(config):
 
 def analyze(config, profile):
     findings, checks = [], []
-    cpu = profile["cpu"]
-    page = "haswell" if cpu == "broadwell" else "coffee-lake" if cpu == "other" else cpu
-    source = GUIDE + ("AMD/zen.html" if cpu == "zen" else f"config.plist/{page}.html")
+    device, selected_cpu = profile["device"], profile["cpu"]
+    laptop = device == "laptop"
+    desktop = device == "desktop"
+    laptop_guide = LAPTOP_GUIDES.get(selected_cpu) if laptop else None
+    desktop_cpu = selected_cpu if desktop and selected_cpu in DESKTOP_CPUS else None
+    cpu = selected_cpu if laptop_guide or desktop_cpu else "other"
+    chipset = profile["chipset"] if desktop else "other"
+    if laptop_guide:
+        source = GUIDE + f"config-laptop.plist/{laptop_guide}.html"
+    elif desktop_cpu:
+        source = GUIDE + ("AMD/zen.html" if cpu == "zen" else f"config.plist/{'haswell' if cpu == 'broadwell' else cpu}.html")
+    else:
+        source = GUIDE
+
+    if laptop_guide:
+        coverage = "Intel laptop rules ran for the selected CPU family. Exact framebuffer, SMBIOS/macOS suitability and ACPI contents still need manual review."
+    elif laptop:
+        coverage = "No CPU-generation-specific laptop rules ran. Only general and laptop form-factor checks are available for this CPU selection."
+    elif desktop_cpu:
+        coverage = "Desktop rules ran. Laptop rules were not run."
+    elif desktop:
+        coverage = "No CPU-generation-specific desktop rules ran. Only general and applicable chipset checks ran. Laptop rules were not run."
+    else:
+        coverage = "No desktop or laptop profile was selected. Device-specific rules were not run."
+    hardware_incomplete = not (laptop_guide or desktop_cpu)
     native = native_validate(config)
 
     def check(key, passed, title, path, detail, fix, severity="warning", link=source, applicable=True):
@@ -183,17 +213,18 @@ def analyze(config, profile):
     inactive_lilu = "lilu.kext" not in kexts and isinstance(kernel_add, list) and any(
         isinstance(e, dict) and str(e.get("BundlePath", "")).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].lower() == "lilu.kext"
         for e in kernel_add)
-    acpi = [str(e.get("Path", "")).lower() for e in entries(config, "ACPI/Add")]
+    acpi = [str(e.get("Path", "")).replace("\\", "/").rsplit("/", 1)[-1].lower() for e in entries(config, "ACPI/Add")]
     drivers = [str(e.get("Path", "")).lower() for e in entries(config, "UEFI/Drivers")]
     has = lambda name: name.lower() in kexts
     q = lambda name: get(config, "Kernel/Quirks/" + name)
     boot = get(config, f"NVRAM/Add/{GUID}/boot-args", "")
     boot = boot if isinstance(boot, str) else ""
     device_properties = get(config, "DeviceProperties/Add", {})
+    device_properties = device_properties if isinstance(device_properties, dict) else {}
     property_pikera = any(
         isinstance(properties, dict) and isinstance(properties.get("agdpmod"), (str, bytes))
         and properties["agdpmod"].rstrip("\0" if isinstance(properties["agdpmod"], str) else b"\0") in ("pikera", b"pikera")
-        for properties in device_properties.values()) if isinstance(device_properties, dict) else False
+        for properties in device_properties.values())
     pikera = "agdpmod=pikera" in boot.split() or property_pikera
     modern_intel = cpu not in ("zen", "other")
     os_version = tuple(int(n) for n in profile["macos"].split("."))
@@ -206,7 +237,7 @@ def analyze(config, profile):
     check("smc-conflict", not (has("VirtualSMC.kext") and has("FakeSMC.kext")), "Two SMC emulators are enabled", "Kernel → Add", "VirtualSMC and FakeSMC must not be used together.", "Keep one SMC emulator; prefer VirtualSMC.", "error")
     check("runtime", "openruntime.efi" in drivers, "OpenRuntime.efi is not enabled", "UEFI → Drivers", "OpenRuntime provides the runtime services used by OpenCore's firmware quirks.", "Add the OpenRuntime.efi shipped with your exact OpenCore release.")
     check("filesystem", any("hfs" in d for d in drivers), "No HFS filesystem driver is listed", "UEFI → Drivers", "macOS recovery and HFS+ volumes may not be readable without HfsPlus or OpenHfsPlus.", "Check your firmware support, then add one HFS+ driver if needed.")
-    check("xhci", q("XhciPortLimit") is not True, "USB port-limit patch is enabled on macOS 11.3+", "Kernel → Quirks → XhciPortLimit", "OpenCore 0.9.3+ improved this quirk on macOS 11–14, but a proper USB map is still required.", "Set XhciPortLimit to false and create a proper USB map.", applicable=os_version >= (11, 3))
+    check("xhci", q("XhciPortLimit") is not True, "USB port-limit patch is enabled on macOS 11.3+", "Kernel → Quirks → XhciPortLimit", "OpenCore 0.9.3+ improved this quirk on macOS 11–14, but a proper USB map is still required.", "Set XhciPortLimit to false and create a proper USB map.", link=source + "#kernel" if not hardware_incomplete else DOCS, applicable=os_version >= (11, 3))
     check("usbmap", has("USBMap.kext") or has("UTBMap.kext") or has("USBPorts.kext"), "A USB map is not identifiable by filename", "Kernel → Add", "Custom-named maps or firmware mappings cannot be recognized from a plist alone.", "Verify that you have a working, machine-specific USB map. Do not rename a working custom map just to silence this warning.", link="https://dortania.github.io/OpenCore-Post-Install/usb/")
     check("usbinjectall", not has("USBInjectAll.kext"), "USBInjectAll is still enabled", "Kernel → Add", "USBInjectAll does not work on AMD CPUs." if cpu == "zen" else "USBInjectAll is a setup aid, not a finished USB map.", "Replace it with a tested USB map.", link=GUIDE + "ktext.html#usb")
     check("lilu-quirk", q("DisableLinkeditJettison") is True, "Lilu needs DisableLinkeditJettison", "Kernel → Quirks → DisableLinkeditJettison", "This quirk is required for reliable Lilu operation.", "Set DisableLinkeditJettison to true.", "error", DOCS, applicable=has("Lilu.kext"))
@@ -214,15 +245,16 @@ def analyze(config, profile):
         check("order-" + plugin, has("Lilu.kext") and kexts.index("lilu.kext") < kexts.index(plugin.lower()) if has(plugin) else True,
               f"{plugin} needs Lilu earlier in the list", "Kernel → Add", "Dependencies must be enabled and loaded before their plugins.", "Enable Lilu and move it above this kext.", "error", DOCS, applicable=has(plugin))
     check("dsdt", not any(Path(p).name == "dsdt.aml" for p in acpi), "A complete DSDT is being injected", "ACPI → Add", "Dortania advises against adding your firmware's complete DSDT.", "Use targeted SSDTs instead of injecting DSDT.aml.")
-    check("plug", any("plug" in p for p in acpi), "CPU power-management SSDT is not identifiable", "ACPI → Add", "Haswell and newer desktops normally need SSDT-PLUG. Custom filenames or alternate methods cannot be identified here.", "Verify plugin-type CPU power management and add a machine-appropriate SSDT-PLUG if absent.", applicable=modern_intel)
-    check("ec-usbx", any("ec" in p for p in acpi) and (cpu in ("haswell", "broadwell") or any("usbx" in p for p in acpi)), "EC / USB power SSDTs are not identifiable", "ACPI → Add", "Haswell/Broadwell need an EC fix; Skylake and newer and AMD Zen also need USBX. Custom SSDTs may already provide these.", "Verify your ACPI tables against Dortania's EC and USBX guidance.")
-    check("awac", any("awac" in p or "rtc0" in p for p in acpi), "Check the board's RTC / AWAC fix", "ACPI → Add", "300-series boards may need an RTC fix; B460 and Z490 require SSDT-AWAC or SSDT-RTC0.", "Inspect your ACPI tables before adding an AWAC/RTC fix.", applicable=profile["chipset"] in ("z390", "300", "z370", "400"))
-    check("pmc", any("pmc" in p for p in acpi), "Check native NVRAM support on this chipset", "ACPI → Add", "True 300-series boards other than Z370 may need SSDT-PMC. A filename check cannot prove firmware behavior.", "Test NVRAM persistence and inspect whether SSDT-PMC is needed.", applicable=profile["chipset"] in ("z390", "300"))
-    check("cpur", any("cpur" in p for p in acpi), "Check CPU definitions on B550 / A520", "ACPI → Add", "Dortania lists SSDT-CPUR for B550/A520 CPU definitions. This is only a filename hint; custom-named tables may already contain the fix.", "For B550/A520, inspect the firmware CPU definitions against the linked SSDT-CPUR source. Add the table only if that fix is absent; an enabled custom-named equivalent does not need renaming.", link=GUIDE + "AMD/zen.html#acpi", applicable=cpu == "zen" and profile["chipset"] == "b550-a520")
-    check("cfglock", q("AppleXcpmCfgLock") is True, "CFG-Lock is enabled without the XCPM workaround", "Kernel → Quirks → AppleXcpmCfgLock", "You reported CFG-Lock enabled. This can prevent CPU power management from initializing.", "Prefer disabling CFG-Lock in BIOS; otherwise enable AppleXcpmCfgLock.", "error", applicable=modern_intel and profile["cfg_lock"] == "enabled")
+    check("plug", any("plug" in p for p in acpi), "CPU power-management SSDT is not identifiable", "ACPI → Add", "Dortania lists SSDT-PLUG for this Intel family. Custom filenames or alternate methods cannot be identified here.", "Verify plugin-type CPU power management and add a machine-appropriate SSDT-PLUG if absent.", link=source + ("#add" if laptop else "#acpi"), applicable=modern_intel)
+    needs_usbx = cpu not in ("haswell", "broadwell")
+    check("ec-usbx", any("ec" in p for p in acpi) and (not needs_usbx or any("usbx" in p for p in acpi)), "EC / USB power SSDTs are not identifiable" if needs_usbx else "EC SSDT is not identifiable", "ACPI → Add", "Dortania lists an EC fix and USB power properties where applicable. Custom SSDTs may already provide these.", "Verify your ACPI tables against Dortania's EC and USBX guidance.", link=source + ("#add" if laptop else "#acpi"), applicable=not hardware_incomplete)
+    check("awac", any("awac" in p or "rtc0" in p for p in acpi), "Check the board's RTC / AWAC fix", "ACPI → Add", "300-series boards may need an RTC fix; B460 and Z490 require SSDT-AWAC or SSDT-RTC0.", "Inspect your ACPI tables before adding an AWAC/RTC fix.", applicable=chipset in ("z390", "300", "z370", "400"))
+    check("pmc", any("pmc" in p for p in acpi), "Check native NVRAM support on this chipset", "ACPI → Add", "True 300-series boards other than Z370 may need SSDT-PMC. A filename check cannot prove firmware behavior.", "Test NVRAM persistence and inspect whether SSDT-PMC is needed.", applicable=chipset in ("z390", "300"))
+    check("cpur", any("cpur" in p for p in acpi), "Check CPU definitions on B550 / A520", "ACPI → Add", "Dortania lists SSDT-CPUR for B550/A520 CPU definitions. This is only a filename hint; custom-named tables may already contain the fix.", "For B550/A520, inspect the firmware CPU definitions against the linked SSDT-CPUR source. Add the table only if that fix is absent; an enabled custom-named equivalent does not need renaming.", link=GUIDE + "AMD/zen.html#acpi", applicable=cpu == "zen" and chipset == "b550-a520")
+    check("cfglock", q("AppleXcpmCfgLock") is True, "CFG-Lock is enabled without the XCPM workaround", "Kernel → Quirks → AppleXcpmCfgLock", "You reported CFG-Lock enabled. This can prevent CPU power management from initializing.", "Prefer disabling CFG-Lock in BIOS; otherwise enable AppleXcpmCfgLock.", "error", source + "#kernel" if modern_intel else DOCS, applicable=modern_intel and profile["cfg_lock"] == "enabled")
     check("vtd", q("DisableIoMapper") is True or "dart=0" in boot.split(), "VT-d is enabled without an I/O mapper workaround", "Kernel → Quirks → DisableIoMapper", "The selected BIOS state may need DisableIoMapper; a deliberately configured DMAR table can be an exception.", "Review your DMAR/IOMMU setup; otherwise enable DisableIoMapper or disable VT-d.", applicable=modern_intel and profile["vt_d"] == "enabled")
     check("rebar", get(config, "Booter/Quirks/ResizeAppleGpuBars") == 0, "Resizable BAR is enabled without the macOS workaround", "Booter → Quirks → ResizeAppleGpuBars", "With Resizable BAR enabled in firmware, Dortania recommends ResizeAppleGpuBars = 0.", "Set ResizeAppleGpuBars to 0, or disable Resizable BAR in firmware.", "error", applicable=profile["rebar"] == "enabled")
-    check("z390services", get(config, "Booter/Quirks/ProtectUefiServices") is True, ("400-series" if profile["chipset"] == "400" else "Z390") + " firmware services are not protected", "Booter → Quirks → ProtectUefiServices", "Dortania recommends this on Z390 and requires it on Z490.", "Enable ProtectUefiServices and verify against your firmware.", applicable=profile["chipset"] in ("z390", "400"))
+    check("z390services", get(config, "Booter/Quirks/ProtectUefiServices") is True, ("400-series" if chipset == "400" else "Z390") + " firmware services are not protected", "Booter → Quirks → ProtectUefiServices", "Dortania recommends this on Z390 and requires it on Z490.", "Enable ProtectUefiServices and verify against your firmware.", applicable=chipset in ("z390", "400"))
     for field, path in [("DummyPowerManagement", "Kernel/Emulate/"), ("ProvideCurrentCpuInfo", "Kernel/Quirks/")]:
         check("amd-" + field, get(config, path + field) is True, f"AMD Zen needs {field}", (path + field).replace("/", " → "), "Dortania's AMD Zen configuration enables this option.", f"Set {field} to true for the selected AMD Zen profile.", "error", applicable=cpu == "zen")
     amd_gap = None
@@ -256,8 +288,8 @@ def analyze(config, profile):
     gpu_source = "https://dortania.github.io/GPU-Buyers-Guide/"
     bq = lambda name: get(config, "Booter/Quirks/" + name)
     check("booter-memory", not (bq("EnableWriteUnprotector") is True and bq("RebuildAppleMemoryMap") is True), "Memory-map quirks commonly conflict", "Booter → Quirks", "EnableWriteUnprotector and RebuildAppleMemoryMap commonly conflict; enable one.", "Choose the memory-map strategy documented for your firmware.")
-    check("write-unprotector", bq("EnableWriteUnprotector") is True, "Check the firmware memory-write workaround", "Booter → Quirks → EnableWriteUnprotector", "Dortania recommends EnableWriteUnprotector enabled and RebuildAppleMemoryMap disabled on Haswell through Kaby Lake.", "Enable EnableWriteUnprotector and disable RebuildAppleMemoryMap.", applicable=cpu in ("haswell", "broadwell", "skylake", "kaby-lake"))
-    check("setup-virtual-map", bq("SetupVirtualMap") is not True, "SetupVirtualMap is enabled on an incompatible platform", "Booter → Quirks → SetupVirtualMap", "B550, A520 and TRx40 must disable this; Comet Lake ASUS, Gigabyte and AsRock boards will not boot with this on.", "Disable SetupVirtualMap for these boards.", "error" if cpu == "zen" else "warning", applicable=cpu == "comet-lake" or (cpu == "zen" and profile["chipset"] in ("b550-a520", "trx40")))
+    check("write-unprotector", bq("EnableWriteUnprotector") is True, "Check the firmware memory-write workaround", "Booter → Quirks → EnableWriteUnprotector", "Dortania recommends EnableWriteUnprotector enabled and RebuildAppleMemoryMap disabled on Haswell through Kaby Lake.", "Enable EnableWriteUnprotector and disable RebuildAppleMemoryMap.", applicable=desktop and cpu in ("haswell", "broadwell", "skylake", "kaby-lake"))
+    check("setup-virtual-map", bq("SetupVirtualMap") is not True, "SetupVirtualMap is enabled on an incompatible platform", "Booter → Quirks → SetupVirtualMap", "B550, A520 and TRx40 must disable this; Comet Lake ASUS, Gigabyte and AsRock boards will not boot with this on.", "Disable SetupVirtualMap for these boards.", "error" if cpu == "zen" else "warning", applicable=desktop and (cpu == "comet-lake" or (cpu == "zen" and chipset in ("b550-a520", "trx40"))))
     check("vault", get(config, "Misc/Security/Vault") != "Secure", "Secure Vault requires a created vault", "Misc → Security → Vault", "Secure will not boot without a vault created; a plist cannot prove one exists.", "Use Optional during setup, or create and verify your vault.", link=source + "#misc")
     check("amd-plug", not any("plug" in p for p in acpi), "AMD users should not use SSDT-PLUG", "ACPI → Add", "SSDT-PLUG configures Intel CPU power management.", "Remove SSDT-PLUG on AMD.", applicable=cpu == "zen")
     check("amd-intel-acpi", not any("awac" in p or "pmc" in p for p in acpi), "Intel chipset SSDTs are enabled on AMD", "ACPI → Add", "AWAC and PMC tables target Intel 300-series firmware, not AMD Zen.", "Remove Intel-specific AWAC/PMC tables.", applicable=cpu == "zen")
@@ -272,13 +304,13 @@ def analyze(config, profile):
     headless_ids = {"haswell": "04001204", "skylake": "01001219", "kaby-lake": "03001259", "coffee-lake": "0300913E", "comet-lake": "0300C89B"}
     if cpu == "skylake" and os_version >= (13,):
         display_ids["skylake"] = {"00001259"}
-    igpu = device_properties.get("PciRoot(0x0)/Pci(0x2,0x0)", {}) if isinstance(device_properties, dict) else {}
+    igpu = device_properties.get("PciRoot(0x0)/Pci(0x2,0x0)", {})
     platform_id = igpu.get("AAPL,ig-platform-id") if isinstance(igpu, dict) else None
-    platform_hex = platform_id.hex().upper() if isinstance(platform_id, bytes) else None
-    if modern_intel and profile["gpu"] == "intel-supported":
-        check("igpu-platform-id", platform_hex in display_ids[cpu], "Check the display iGPU platform-id", "DeviceProperties → Add → AAPL,ig-platform-id", "Missing platform-id can cause a black screen; the display id must match the CPU family.", "Use display bytes " + ", ".join(sorted(display_ids[cpu])) + ".", "error" if platform_id is None else "warning", source + "#deviceproperties")
-    elif modern_intel and cpu in headless_ids and profile["gpu"] in ("amd-supported", "amd-polaris-vega", "amd-navi", "amd-navi24", "nvidia-kepler", "nvidia-maxwell", "nvidia-turing"):
-        check("igpu-headless", platform_hex == headless_ids[cpu], "Use a headless iGPU id with a discrete display GPU", "DeviceProperties → Add → AAPL,ig-platform-id", "The selected discrete GPU drives the display; an injected iGPU should use a headless framebuffer.", "Use headless bytes " + headless_ids[cpu] + ".", link=source + "#deviceproperties", applicable=platform_id is not None)
+    platform_hex = platform_id.hex().upper() if valid_platform_id(platform_id) else None
+    if desktop and modern_intel and profile["gpu"] == "intel-supported":
+        check("igpu-platform-id", platform_hex in display_ids[cpu], "Check the display iGPU platform-id", "DeviceProperties → Add → AAPL,ig-platform-id", "Missing platform-id can cause a black screen; the display id must match the CPU family.", "Use display bytes " + ", ".join(sorted(display_ids[cpu])) + ".", "error" if platform_id is None else "warning", source + "#deviceproperties", applicable=platform_id is None or platform_hex is not None)
+    elif desktop and cpu in headless_ids and profile["gpu"] in ("amd-supported", "amd-polaris-vega", "amd-navi", "amd-navi24", "nvidia-kepler", "nvidia-maxwell", "nvidia-turing"):
+        check("igpu-headless", platform_hex == headless_ids[cpu], "Use a headless iGPU id with a discrete display GPU", "DeviceProperties → Add → AAPL,ig-platform-id", "The selected discrete GPU drives the display; an injected iGPU should use a headless framebuffer.", "Use headless bytes " + headless_ids[cpu] + ".", link=source + "#deviceproperties", applicable=platform_hex is not None)
     check("gpu-unsupported", profile["gpu"] not in ("intel-xe", "nvidia-turing", "amd-navi24"), "The selected GPU family has no native macOS acceleration", "Hardware → Graphics", "Intel Xe, NVIDIA Turing and later, and AMD Navi 24 are not natively supported by macOS.", "Use a supported GPU or disable this GPU and use a supported alternative. A plist edit cannot add a missing driver.", "error", gpu_source)
     check("gpu-maxwell", profile["gpu"] != "nvidia-maxwell", "NVIDIA Maxwell / Pascal is unsupported on this macOS", "Hardware → Graphics", "NVIDIA web drivers stop at macOS High Sierra, older than every target offered here.", "Use a supported graphics device for this macOS version.", "error", gpu_source)
     check("gpu-kepler", profile["gpu"] != "nvidia-kepler", "NVIDIA Kepler lost native support in Monterey", "Hardware → Graphics", "Kepler has no native acceleration on macOS 12 and newer. Root patching is outside this checker's coverage.", "Use a supported GPU or independently evaluate the limitations of legacy patching.", "error", gpu_source, applicable=os_version >= (12,))
@@ -302,7 +334,7 @@ def analyze(config, profile):
         if re.fullmatch(r"iMac(?:19|20),\d+|iMacPro1,1|MacPro7,1", name):
             return 15
         return None
-    if cpu in recommended and isinstance(model, str):
+    if desktop_cpu and cpu in recommended and isinstance(model, str):
         accepted = set(recommended[cpu])
         if cpu == "haswell" and os_version[0] == 12:
             accepted.update(("iMac16,2", "iMac17,1"))
@@ -312,6 +344,51 @@ def analyze(config, profile):
             accepted = {m for m in accepted if (last_supported(m) or 99) >= os_version[0]}
         expired = last_supported(model) is not None and last_supported(model) < os_version[0]
         check("smbios", not expired and model in accepted, "SMBIOS is unsupported on the target macOS" if expired else "SMBIOS does not match the selected CPU family", "PlatformInfo → Generic → SystemProductName", "The model must support the target OS and match Dortania's platform recommendations.", "Review " + ", ".join(sorted(accepted)) + " for this platform and target.", "error" if expired else "warning", source + "#platforminfo")
+    platform_ids = ((path, values["AAPL,ig-platform-id"]) for path, values in device_properties.items()
+                    if isinstance(values, dict) and "AAPL,ig-platform-id" in values)
+    for index, (path, value) in enumerate(platform_ids):
+        check(f"igpu-platform-id-type-{index}" if index else "igpu-platform-id-type",
+              valid_platform_id(value), "iGPU platform-id must be four bytes of Data",
+              f"DeviceProperties → Add → {path} → AAPL,ig-platform-id",
+              "Hex text is not plist Data. A correct type does not establish that this framebuffer suits your iGPU.",
+              "Set the key's type to Data in your plist editor and enter the bytes for your exact graphics hardware.",
+              "error", source + "#deviceproperties" if not hardware_incomplete else DOCS)
+
+    laptop_acpi = source + "#add" if laptop_guide else "https://dortania.github.io/Getting-Started-With-ACPI/"
+    desktop_model = isinstance(model, str) and re.fullmatch(r"(?:iMac(?:Pro)?|Macmini|MacPro|Xserve)\d+,\d+", model, re.IGNORECASE)
+    check("laptop-smbios", not desktop_model, "Desktop SMBIOS selected for a laptop",
+          "PlatformInfo → Generic → SystemProductName",
+          "This model identifies a desktop Mac, but the selected machine is a laptop. Model suitability is separate from serial validity.",
+          "Review the MacBook family options for your CPU, graphics and target macOS. There is no universal laptop SMBIOS.",
+          link=source + "#platforminfo" if laptop_guide else GUIDE, applicable=laptop and isinstance(model, str) and bool(model))
+    check("laptop-ec-desktop", not any(p in ("ssdt-ec-desktop.aml", "ssdt-ec-usbx-desktop.aml") for p in acpi),
+          "A desktop EC SSDT is enabled for a laptop", "ACPI → Add",
+          "The filename suggests a desktop EC table. The plist does not prove what the AML actually does.",
+          "Inspect the table and use the laptop variant if appropriate. A laptop normally needs to keep its real EC available.",
+          link=laptop_acpi, applicable=laptop)
+    xosi_rename = any(p.get("Find") == b"_OSI" and p.get("Replace") == b"XOSI"
+                      for p in entries(config, "ACPI/Patch"))
+    check("laptop-xosi", "ssdt-xosi.aml" in acpi, "_OSI is renamed without an identifiable SSDT-XOSI", "ACPI → Patch / Add",
+          "An enabled _OSI → XOSI patch redirects calls, but no enabled SSDT-XOSI.aml is listed. A custom-named table may supply XOSI.",
+          "Verify that an enabled table defines XOSI or disable the rename if it isn't needed.",
+          link=source + "#patch" if laptop_guide else laptop_acpi, applicable=laptop and xosi_rename)
+    check("laptop-pnlf", any(p == "ssdt-pnlf.aml" or (p.startswith("ssdt-pnlf-") and p.endswith(".aml")) for p in acpi),
+          "Verify built-in display backlight support", "ACPI → Add",
+          "No enabled SSDT-PNLF is identifiable. Some built-in displays need a PNLF device for brightness control; a custom table may provide it.",
+          "Test brightness control and verify the machine's ACPI provides a suitable PNLF device if needed.",
+          link=laptop_acpi, applicable=laptop_guide is not None)
+    check("laptop-battery", has("ECEnabler.kext"), "Verify laptop battery reporting", "Kernel → Add / ACPI → Add",
+          "No applicable ECEnabler.kext is listed. Some laptops need it to read wide EC fields; others already work or use custom ACPI battery patches.",
+          "Test battery status. If readings fail, check whether ECEnabler or machine-specific battery ACPI work is needed.",
+          "info", "https://dortania.github.io/OpenCore-Post-Install/laptop-specific/battery.html", applicable=laptop)
+    for plugin in ("VoodooI2CHID", "VoodooI2CElan", "VoodooI2CFTE", "VoodooI2CAtmelMXT", "AlpsHID"):
+        name = plugin.lower() + ".kext"
+        if laptop and has(name):
+            check(f"laptop-order-{plugin}", has("VoodooI2C.kext") and kexts.index("voodooi2c.kext") < kexts.index(name),
+                  f"{plugin}.kext needs VoodooI2C.kext first", "Kernel → Add",
+                  "The controller must be enabled for the target macOS and loaded before its input plugin.",
+                  "Enable a matching VoodooI2C.kext and move it above its plugin.",
+                  "error", GUIDE + "ktext.html#i2c-usb-hid-devices")
     for field in ("SystemSerialNumber", "MLB", "SystemUUID"):
         value = generic.get(field)
         check("identity-" + field, isinstance(value, str) and value not in ("", "M00000000001", "M0000000000000001", "00000000-0000-0000-0000-000000000000") and not str(value).startswith("W000"),
@@ -328,15 +405,17 @@ def analyze(config, profile):
     check("rom", isinstance(rom, bytes) and len(rom) == 6 and rom not in (bytes(6), bytes.fromhex("112233445566")), "ROM is missing, malformed, or an example value", "PlatformInfo → Generic → ROM", "ROM should be six nonzero, machine-specific bytes, commonly from a stable network adapter.", "Set ROM as six bytes of Data appropriate for this machine.")
 
     if native["status"] == "failed":
-        findings.insert(0, {"id": "ocvalidate", "severity": "error", "title": f"OpenCore validator reported {native['issues']} issue(s)",
-                            "path": "OpenCore → Schema & semantics", "detail": "The official version-matched validator rejected this config. Open the raw diagnostics below for the exact keys.",
+        issue_count = native["issues"]
+        findings.insert(0, {"id": "ocvalidate", "severity": "error",
+                            "title": f"OpenCore validator reported {issue_count} {'issue' if issue_count == 1 else 'issues'}",
+                            "path": "OpenCore → Schema & semantics", "detail": "These details are from the official OpenCore validator and count as one grouped finding.",
                             "fix": "Resolve these diagnostics with the OpenCore 1.0.8 configuration manual, then run the check again.", "source": DOCS})
     gaps = ["EFI files: presence, versions, executable contents and kext dependencies on disk were not inspected.",
             "ACPI contents, firmware behavior, USB mapping quality, unlisted SMBIOS/macOS combinations and actual boot success require manual verification.",
             "CPU/GPU model and board text are report labels, not automatically detected hardware. Rules use your selected families and chipset.",
             "Kext and patch presence checks count only x86_64/Any entries whose kernel ranges cover the selected macOS family. Narrower ranges need manual review for your exact point release."]
-    if cpu == "other":
-        gaps.append("No CPU-generation-specific rules ran for Other / unknown. This is a desktop checker; laptop and newer Intel workarounds are not covered.")
+    if hardware_incomplete:
+        gaps.insert(0, coverage)
     if profile["gpu"] == "other":
         gaps.append("GPU compatibility is unknown for the selected family.")
     if any(profile[k] == "unknown" for k in ("cfg_lock", "vt_d", "rebar")):
@@ -348,7 +427,7 @@ def analyze(config, profile):
     if native["status"] == "unavailable":
         gaps.insert(0, "Official validator unavailable: schema and semantic coverage is incomplete.")
     counts = {s: sum(f["severity"] == s for f in findings) for s in ("error", "warning", "info")}
-    return {"version": VERSION, "profile": profile, "findings": findings, "counts": counts, "native": native,
+    return {"version": VERSION, "profile": profile, "findings": findings, "counts": counts, "native": native, "hardware_coverage": coverage,
             "checks": checks, "checked": sum(c["status"] != "skipped" for c in checks),
             "passed": sum(c["status"] == "passed" for c in checks), "skipped": sum(c["status"] == "skipped" for c in checks),
-            "gaps": gaps, "status": "incomplete" if native["status"] == "unavailable" or amd_gap else "issues" if counts["error"] or counts["warning"] else "no-known-issues"}
+            "gaps": gaps, "status": "incomplete" if native["status"] == "unavailable" or hardware_incomplete or amd_gap else "issues" if counts["error"] or counts["warning"] else "no-known-issues"}

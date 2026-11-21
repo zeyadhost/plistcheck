@@ -1,6 +1,6 @@
 # plistcheck
 
-A second pair of eyes for your OpenCore config. Upload an XML or binary `config.plist`, select your desktop hardware and target macOS, and get actionable findings with links to their sources.
+A second pair of eyes for your OpenCore config. Upload an XML or binary `config.plist`, select your hardware and target macOS, and get actionable findings with links to their sources.
 
 **Not “every issue”, and not a boot guarantee.** A valid plist can still describe an unbootable EFI. The interface and exported report explicitly list coverage gaps.
 
@@ -37,7 +37,9 @@ Only OpenCore 1.0.8 is supported. The config format cannot reliably reveal the i
 
 ### What the profile means
 
-Selected CPU/GPU families, chipset, macOS, and BIOS options drive rules. Exact model names are optional labels, **not automatically decoded hardware**. Unknown BIOS states skip conditional checks. “AMD other supported / not sure” (with separate Polaris/Vega and Navi choices) and “Intel pre-Xe” do not certify a specific GPU: device IDs, spoofing, macOS-specific support, and output wiring still need review. Intel 11th-gen or newer, legacy Intel, laptops, and unknown CPUs do not have generation-specific coverage.
+Select Desktop or Laptop before choosing a CPU. Desktop profiles never run laptop rules. Intel laptop checks cover Haswell, Broadwell, Skylake, Kaby Lake, Coffee Lake, Whiskey Lake, Comet Lake, and Ice Lake. They flag desktop SMBIOS models and desktop EC tables, `_OSI` → `XOSI` renames without an identifiable companion SSDT, and I²C kext ordering. They also mark backlight and battery behavior for review where appropriate.
+
+Exact model names are optional labels, **not automatically decoded hardware**. Unknown BIOS states skip conditional checks. Broad GPU families do not certify a particular GPU or framebuffer. The checker can confirm that an injected `AAPL,ig-platform-id` is four bytes of plist Data; it does not select a laptop framebuffer for your device. An unknown device type or a CPU family not covered for that device results in incomplete coverage even if official validation succeeds.
 
 For AMD Zen, enter the physical CPU core count, not its thread count. Kernel patch bytes, identifiers, masks, operation fields and applicable kernel intervals are compared with AMD Vanilla commit `eaf52ef292abf4ebec899df6d48626569ba50cc6`. Missing/disabled/modified required reference operations, zero core-count placeholders, mismatches against the supplied core count, and widened point-release ranges are errors. Comments are not used as patch identity. Ventura's core-patch transition is checked across both required intervals. An unknown physical core count or unavailable verified reference leaves coverage incomplete. This is reference comparison, not a proof that patches match or execute against a particular kernel binary; custom/newer sets need independent review.
 
@@ -48,8 +50,8 @@ SSDT and USB-map hints are filename heuristics and are warnings, not proof that 
 - The actual EFI directory: file existence, binary versions, on-disk kext dependency metadata.
 - ACPI contents, firmware implementation, USB map correctness, network/audio device IDs.
 - Optional AMD PAT alternatives, board/Zen-4-specific IOPCI patches, custom/newer AMD sets, and actual kernel-binary applicability/execution.
-- Exhaustive CPU/GPU/macOS compatibility or unlisted SMBIOS combinations, BIOS state, serial validity with Apple, or boot success.
-- OpenCore releases other than 1.0.8, macOS later than Sequoia, and laptop-specific setup.
+- Exhaustive CPU/GPU/macOS/SMBIOS compatibility, BIOS state, serial validity with Apple, or boot success.
+- OpenCore releases other than 1.0.8 and macOS later than Sequoia.
 
 The app never edits a config or offers a fake “fix everything” button. Keep a known-good EFI backup and validate each change.
 

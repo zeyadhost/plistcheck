@@ -3,7 +3,8 @@ import ast
 import subprocess
 from pathlib import Path
 
-from checker import DOCS, GENERATIONS, GUIDE
+import amd
+from checker import DESKTOP_CPUS, DOCS, GUIDE, LAPTOP_GUIDES
 
 
 def main():
@@ -14,11 +15,15 @@ def main():
             links.extend([node.args[7]] if len(node.args) > 7 else [])
             links.extend(k.value for k in node.keywords if k.arg == "link")
     urls = set()
-    for cpu in GENERATIONS:
-        page = "haswell" if cpu == "broadwell" else "coffee-lake" if cpu == "other" else cpu
-        source = GUIDE + ("AMD/zen.html" if cpu == "zen" else f"config.plist/{page}.html")
+    desktop_pages = ["AMD/zen.html" if cpu == "zen" else f"config.plist/{'haswell' if cpu == 'broadwell' else cpu}.html"
+                     for cpu in DESKTOP_CPUS]
+    profiles = [(GUIDE + page, False) for page in desktop_pages]
+    profiles += [(GUIDE + f"config-laptop.plist/{page}.html", True) for page in set(LAPTOP_GUIDES.values())]
+    for source, laptop in profiles:
         urls.add(source)
-        env = {"GUIDE": GUIDE, "DOCS": DOCS, "source": source, "gpu_source": "https://dortania.github.io/GPU-Buyers-Guide/"}
+        env = {"GUIDE": GUIDE, "DOCS": DOCS, "amd": amd, "source": source, "gpu_source": "https://dortania.github.io/GPU-Buyers-Guide/",
+               "laptop": laptop, "laptop_guide": laptop, "laptop_acpi": source + "#add" if laptop else "https://dortania.github.io/Getting-Started-With-ACPI/",
+               "hardware_incomplete": False, "modern_intel": not source.endswith("/zen.html")}
         for link in links:
             url = eval(compile(ast.Expression(link), "<source link>", "eval"), {"__builtins__": {}}, env)
             if url.startswith("https://dortania.github.io/"):
