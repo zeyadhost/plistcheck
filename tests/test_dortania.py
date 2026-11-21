@@ -109,6 +109,17 @@ def test_display_framebuffer_missing_wrong_and_correct(value, expected):
     assert findings == ([] if expected is None else [expected])
 
 
+@pytest.mark.parametrize("macos,value,expected", [("12", "00001219", False), ("13", "00001259", False), ("14", "00001219", True)])
+def test_skylake_uses_kaby_framebuffer_on_ventura(macos, value, expected):
+    config, profile = fixture_case(9)
+    profile.update(cpu="skylake", macos=macos)
+    config["DeviceProperties"]["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"]["AAPL,ig-platform-id"] = bytes.fromhex(value)
+    findings = [f for f in analyze(config, profile)["findings"] if f["id"] == "igpu-platform-id"]
+    assert bool(findings) == expected
+    if findings:
+        assert "00001259" in findings[0]["fix"]
+
+
 @pytest.mark.parametrize("value,expected", [(None, False), (bytes.fromhex("07009B3E"), True), (bytes.fromhex("0300C89B"), False)])
 def test_headless_framebuffer_missing_wrong_and_correct(value, expected):
     config, profile = fixture_case(5)

@@ -260,6 +260,8 @@ def analyze(config, profile):
     check("gpu-legacy-intel", False, "This Intel iGPU lost native support after Monterey", "Hardware → Graphics", "Haswell and Broadwell graphics have highest supported OS Monterey (12).", "Use supported graphics for macOS 13 or newer.", "error", gpu_source + "modern-gpus/intel-gpu.html", applicable=profile["gpu"] == "intel-supported" and cpu in ("haswell", "broadwell") and os_version >= (13,))
     display_ids = {"haswell": {"0300220D"}, "broadwell": {"07002216", "06002616"}, "skylake": {"00001219"}, "kaby-lake": {"00001259"}, "coffee-lake": {"07009B3E", "00009B3E"}, "comet-lake": {"07009B3E", "00009B3E"}}
     headless_ids = {"haswell": "04001204", "skylake": "01001219", "kaby-lake": "03001259", "coffee-lake": "0300913E", "comet-lake": "0300C89B"}
+    if cpu == "skylake" and os_version >= (13,):
+        display_ids["skylake"] = {"00001259"}
     device_properties = get(config, "DeviceProperties/Add", {})
     igpu = device_properties.get("PciRoot(0x0)/Pci(0x2,0x0)", {}) if isinstance(device_properties, dict) else {}
     platform_id = igpu.get("AAPL,ig-platform-id") if isinstance(igpu, dict) else None
