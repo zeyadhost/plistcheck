@@ -13,6 +13,7 @@ const severityLabel = {all:'All findings', error:'Errors', warning:'Warnings', i
 const severityName = {error:'Error', warning:'Warning', info:'Note'};
 
 function error(message) { $('#form-error').textContent = message; $('#form-error').hidden = !message; $('#file').setAttribute('aria-invalid', message ? 'true' : 'false'); }
+function revealError() { $('#file').focus({preventScroll:true}); $('#form-error').scrollIntoView({block:'nearest', behavior:'instant'}); }
 function stale() {
   revision += 1;
   if (currentReport) { $('#result-status').textContent = 'INPUT CHANGED · RUN AGAIN'; $('#report').classList.add('stale'); }
@@ -80,13 +81,13 @@ $('#demo').addEventListener('click', async () => {
       ? 'Synthetic Coffee Lake/Z390 config, checked against your unchanged hardware selections. This is not your EFI; never boot this example.'
       : 'Synthetic Coffee Lake/Z390 example with a matching sample profile. Never boot this configuration.';
     await runCheck();
-  } catch (e) { error(e.message); } finally { $('#demo').disabled = false; }
+  } catch (e) { error(e.message); revealError(); } finally { $('#demo').disabled = false; }
 });
 
 form.addEventListener('submit', event => { event.preventDefault(); runCheck(); });
 async function runCheck() {
   if (running) return;
-  if (!selectedFile) { error('Add a config.plist, or try the example first.'); $('#file').focus({preventScroll:true}); $('#form-error').scrollIntoView({block:'nearest', behavior:'instant'}); return; }
+  if (!selectedFile) { error('Add a config.plist, or try the example first.'); revealError(); return; }
   running = true; error('');
   const currentRevision = revision;
   const data = new FormData(form);
@@ -103,7 +104,12 @@ async function runCheck() {
     currentReport = result; reportRevision = currentRevision; severity = 'all'; renderReport();
     $('#results').focus({preventScroll:true});
     $('#results').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block:'start'});
-  } catch (e) { error(e.message || 'Could not reach the checker. Please try again.'); $('#result-status').textContent = 'CHECK NOT COMPLETED'; }
+  } catch (e) {
+    if (revision !== currentRevision) { $('#result-status').textContent = 'INPUT CHANGED · RUN AGAIN'; return; }
+    error(e.message || 'Could not reach the checker. Please try again.');
+    $('#result-status').textContent = 'CHECK NOT COMPLETED';
+    revealError();
+  }
   finally { running = false; $('#run').disabled = !selectedFile; $('#run').innerHTML = 'Check configuration <span>↗</span>'; }
 }
 
