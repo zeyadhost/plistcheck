@@ -110,6 +110,16 @@ def test_smbios_family_and_support(cpu, macos, model, expected):
     assert findings == ([] if expected is None else [expected])
 
 
+@pytest.mark.parametrize("macos,includes_macpro6", [("12", True), ("13", False), ("15", False)])
+def test_zen_recommendations_exclude_expired_models(macos, includes_macpro6):
+    config, profile = fixture_case(8)
+    profile["macos"] = macos
+    finding = next(f for f in analyze(config, profile)["findings"] if f["id"] == "smbios")
+    assert ("MacPro6,1" in finding["fix"]) == includes_macpro6
+    assert "MacPro7,1" in finding["fix"]
+    assert "iMacPro1,1" in finding["fix"]
+
+
 @pytest.mark.parametrize("value,expected", [(None, "error"), (b"wrong", "warning"), (bytes.fromhex("00001259"), None)])
 def test_display_framebuffer_missing_wrong_and_correct(value, expected):
     config, profile = fixture_case(9)

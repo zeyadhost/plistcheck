@@ -303,6 +303,8 @@ def analyze(config, profile):
             accepted.update(("iMac16,2", "iMac17,1"))
         if cpu != "zen" and all((last_supported(m) or 99) < os_version[0] for m in accepted):
             accepted = {"iMac18,1", "iMac18,3"} if os_version[0] == 13 else {"iMac19,1", "iMac19,2"}
+        if cpu == "zen":
+            accepted = {m for m in accepted if (last_supported(m) or 99) >= os_version[0]}
         expired = last_supported(model) is not None and last_supported(model) < os_version[0]
         check("smbios", not expired and model in accepted, "SMBIOS is unsupported on the target macOS" if expired else "SMBIOS does not match the selected CPU family", "PlatformInfo → Generic → SystemProductName", "The model must support the target OS and match Dortania's platform recommendations.", "Review " + ", ".join(sorted(accepted)) + " for this platform and target.", "error" if expired else "warning", source + "#platforminfo")
     for field in ("SystemSerialNumber", "MLB", "SystemUUID"):
