@@ -151,7 +151,8 @@ def analyze(config, profile):
                              "detail": detail, "fix": fix, "source": link})
 
     kernel_range = darwin_range(profile["macos"])
-    kexts = [str(e.get("BundlePath", "")).split("/")[0].lower() for e in entries(config, "Kernel/Add", kernel_range)]
+    kexts = [str(e.get("BundlePath", "")).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].lower()
+             for e in entries(config, "Kernel/Add", kernel_range)]
     acpi = [str(e.get("Path", "")).lower() for e in entries(config, "ACPI/Add")]
     drivers = [str(e.get("Path", "")).lower() for e in entries(config, "UEFI/Drivers")]
     has = lambda name: name.lower() in kexts

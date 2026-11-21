@@ -124,3 +124,11 @@ def test_out_of_range_kexts_and_patches_do_not_satisfy_presence_checks():
     for kext in config["Kernel"]["Add"]:
         kext["MaxKernel"] = ""
     assert "smc" not in finding_ids(config)
+
+
+def test_nested_kext_bundle_names_and_plugin_order():
+    config = demo_config()
+    for entry in config["Kernel"]["Add"]:
+        entry["BundlePath"] = "Drivers/" + entry["BundlePath"]
+    ids = finding_ids(config)
+    assert not {"lilu", "smc", "order-WhateverGreen.kext"} & ids
