@@ -1,3 +1,5 @@
+import { checkLocally } from './engine.mjs';
+
 const $ = (selector) => document.querySelector(selector);
 const form = $('#profile');
 let selectedFile = null;
@@ -89,7 +91,7 @@ $('#demo').addEventListener('click', async () => {
   const requestedRevision = revision;
   $('#demo').disabled = true;
   try {
-    const response = await fetch('/api/demo');
+    const response = await fetch(new URL('./runtime/example.plist', import.meta.url));
     if (!response.ok) throw new Error('The example could not load. Please try again.');
     const blob = await response.blob();
     if (revision !== requestedRevision || running) return;
@@ -112,7 +114,6 @@ async function runCheck() {
   if (exampleSelected && !profileEdited) {
     for (const [field, value] of Object.entries(exampleProfile)) data.set(field, value);
   }
-  data.append('config', selectedFile);
   $('#run').disabled = true;
   $('#run').setAttribute('aria-busy', 'true');
   $('#run').textContent = 'Checking configuration…';
@@ -120,16 +121,16 @@ async function runCheck() {
   $('#results').dataset.state = 'running';
   $('#filter-status').textContent = '';
   try {
-    const response = await fetch('/api/check', {method:'POST',body:data});
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'The check failed. Please try again.');
+    const result = await checkLocally(selectedFile, Object.fromEntries(data), message => {
+      if (revision === currentRevision) $('#result-status').textContent = message;
+    });
     if (revision !== currentRevision) { $('#result-status').textContent = 'Inputs changed · Check again'; $('#results').dataset.state = 'stale'; return; }
     currentReport = result; reportRevision = currentRevision; severity = 'all'; renderReport();
     $('#results').focus({preventScroll:true});
     $('#results').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block:'start'});
   } catch (e) {
     if (revision !== currentRevision) { $('#result-status').textContent = 'Inputs changed · Check again'; $('#results').dataset.state = 'stale'; return; }
-    error(e.message || 'Could not reach the checker. Please try again.');
+    error(e.message || 'The local checker could not finish. Please try again.');
     $('#result-status').textContent = 'Check not completed';
     $('#results').dataset.state = 'error';
     revealError();

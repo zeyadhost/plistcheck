@@ -6,16 +6,17 @@
   <meta name="theme-color" content="#f5f5f7">
   <meta name="description" content="Check an OpenCore config.plist against your hardware with ocvalidate and source-linked rules.">
   <title>plistcheck | OpenCore config checker</title>
-  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
-  <link rel="manifest" href="/assets/manifest.json" crossorigin="use-credentials">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/select.js" defer></script>
-  <script src="/assets/app.js" defer></script>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./assets/manifest.json">
+  <link rel="stylesheet" href="./assets/style.css">
+  <script src="./assets/select.js" defer></script>
+  <script src="./assets/app.js" type="module"></script>
 </head>
 <body>
   <a class="skip-link" href="#checker">Skip to checker</a>
   <header class="site-header" id="top">
-    <a class="brand" href="#top" aria-label="plistcheck home"><img src="/assets/icon.svg" width="30" height="30" alt="">plistcheck</a>
+    <a class="brand" href="#top" aria-label="plistcheck home"><img src="./assets/icon.svg" width="30" height="30" alt="">plistcheck</a>
     <nav aria-label="Resources"><a href="#coverage">What we check</a><a href="https://github.com/zeyadhost/plistcheck" target="_blank" rel="noreferrer">View on GitHub <span aria-hidden="true">↗</span></a></nav>
   </header>
   <main>
@@ -65,7 +66,7 @@
               <label>Resizable BAR<select name="rebar"><option value="unknown">Unknown</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label>
             </div></details>
             <button class="primary" id="run" type="submit">Check configuration</button>
-            <p class="privacy"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2M4 7h8v7H4V7Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg><span>Uploads are checked, then discarded.</span></p>
+            <p class="privacy"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2M4 7h8v7H4V7Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg><span>Checked on your device. Your file is never uploaded.</span></p>
           </form>
         </div>
         <section class="results-column" id="results" tabindex="-1" aria-label="Diagnostic results">
