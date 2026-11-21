@@ -73,6 +73,17 @@ def test_demo_driver_schema():
     assert "Missing key" not in result["output"]
 
 
+@pytest.mark.parametrize("chipset", ["z390", "400"])
+def test_known_desktop_chipset_is_checked_with_unknown_cpu(chipset):
+    config = demo_config()
+    config["ACPI"]["Add"] = []
+    config["Booter"]["Quirks"]["ProtectUefiServices"] = False
+    report = analyze(config, profile_from({"device": "desktop", "chipset": chipset}))
+    expected = {"awac", "z390services"} | ({"pmc"} if chipset == "z390" else set())
+    assert report["status"] == "incomplete"
+    assert expected <= {finding["id"] for finding in report["findings"]}
+
+
 def test_native_covers_dependency_checks_with_fallback():
     config, profile = fixture_case(2)
     native = native_validate(config)

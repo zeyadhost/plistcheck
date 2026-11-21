@@ -177,7 +177,7 @@ def analyze(config, profile):
     laptop_guide = LAPTOP_GUIDES.get(selected_cpu) if laptop else None
     desktop_cpu = selected_cpu if desktop and selected_cpu in DESKTOP_CPUS else None
     cpu = selected_cpu if laptop_guide or desktop_cpu else "other"
-    chipset = profile["chipset"] if desktop_cpu else "other"
+    chipset = profile["chipset"] if desktop else "other"
     if laptop_guide:
         source = GUIDE + f"config-laptop.plist/{laptop_guide}.html"
     elif desktop_cpu:
@@ -192,7 +192,7 @@ def analyze(config, profile):
     elif desktop_cpu:
         coverage = "Desktop rules ran. Laptop rules were not run."
     elif desktop:
-        coverage = "No CPU-generation-specific rules ran for this desktop CPU selection. Laptop rules were not run."
+        coverage = "No CPU-generation-specific desktop rules ran. Only general and applicable chipset checks ran. Laptop rules were not run."
     else:
         coverage = "No desktop or laptop profile was selected. Device-specific rules were not run."
     hardware_incomplete = not (laptop_guide or desktop_cpu)
