@@ -14,6 +14,15 @@ const severityLabel = {all:'All findings', error:'Errors', warning:'Warnings', i
 const severityName = {error:'Error', warning:'Warning', info:'Note'};
 const exampleProfile = {device:'desktop',cpu:'coffee-lake',cpu_model:'Intel Core i7-9700K',gpu:'amd-polaris-vega',gpu_model:'Radeon RX 580',chipset:'z390',board:'Gigabyte Z390 AORUS PRO',macos:'14',cfg_lock:'enabled',vt_d:'unknown',rebar:'disabled'};
 
+function updateIdentity() {
+  const {device, cpu, macos} = form.elements;
+  $('#fetch-profile').textContent = device.value === 'other'
+    ? 'not specified — choose below'
+    : `${familyLabel('device', device.value)} / ${familyLabel('cpu', cpu.value)}`;
+  $('#fetch-target').textContent = `macOS ${familyLabel('macos', macos.value).replace(' · ', ' ')}`;
+  $('#fetch-input').textContent = selectedFile ? selectedFile.name : 'waiting for config.plist';
+}
+
 function error(message) { $('#form-error').textContent = message; $('#form-error').hidden = !message; $('#file').setAttribute('aria-invalid', message ? 'true' : 'false'); }
 function revealError() { $('#file').focus({preventScroll:true}); $('#form-error').scrollIntoView({block:'nearest', behavior:'instant'}); }
 function stale() {
@@ -29,6 +38,7 @@ function setFile(file, example = false) {
   if (file.size === 0 || file.size > 2 * 1024 * 1024) {
     selectedFile = null;
     exampleSelected = false;
+    updateIdentity();
     $('#file').value = '';
     $('#file-title').textContent = 'File rejected — choose another';
     $('#file-subtitle').textContent = 'Use a non-empty XML or binary config.plist under 2 MB';
@@ -42,6 +52,7 @@ function setFile(file, example = false) {
   }
   selectedFile = file;
   exampleSelected = example;
+  updateIdentity();
   $('#file-title').textContent = file.name;
   $('#file-subtitle').textContent = `${(file.size / 1024).toFixed(1)} KB · ready to inspect · click to replace`;
   $('#dropzone').classList.add('has-file');
@@ -71,6 +82,7 @@ function updateHardwareFields() {
   if (cpu.disabled || cpu.selectedOptions[0]?.disabled) cpu.value = 'other';
   $('#chipset-field').hidden = chipset.disabled = !desktop;
   $('#core-count-field').hidden = cores.disabled = !desktop || cpu.value !== 'zen';
+  updateIdentity();
 }
 function profileChanged() {
   profileEdited = true;
@@ -105,6 +117,7 @@ async function runCheck() {
   if (running) return;
   if (!selectedFile) { error('Add a config.plist, or try the example first.'); revealError(); return; }
   running = true; error('');
+  $('#results').setAttribute('aria-busy', 'true');
   const currentRevision = revision;
   const data = new FormData(form);
   if (exampleSelected && !profileEdited) {
@@ -129,7 +142,7 @@ async function runCheck() {
     $('#result-status').textContent = 'CHECK NOT COMPLETED';
     revealError();
   }
-  finally { running = false; $('#run').disabled = !selectedFile; $('#run').innerHTML = 'Check configuration <span>↗</span>'; }
+  finally { running = false; $('#results').setAttribute('aria-busy', 'false'); $('#run').disabled = !selectedFile; $('#run').innerHTML = 'Run diagnostics <span aria-hidden="true">↵</span>'; }
 }
 
 function filterFindings(filter) {
