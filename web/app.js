@@ -4,6 +4,7 @@ let selectedFile = null;
 let currentReport = null;
 let running = false;
 let revision = 0;
+let reportRevision = -1;
 let severity = 'all';
 const escape = (text) => String(text ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -58,7 +59,7 @@ async function runCheck() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'The check failed. Please try again.');
     if (revision !== currentRevision) { $('#result-status').textContent = 'INPUT CHANGED · RUN AGAIN'; return; }
-    currentReport = result; severity = 'all'; renderReport();
+    currentReport = result; reportRevision = currentRevision; severity = 'all'; renderReport();
     if (matchMedia('(max-width: 850px)').matches) $('#results').scrollIntoView({behavior:'smooth', block:'start'});
   } catch (e) { error(e.message || 'Could not reach the checker. Please try again.'); $('#result-status').textContent = 'CHECK NOT COMPLETED'; }
   finally { running = false; $('#run').disabled = false; $('#run').innerHTML = 'Check configuration <span>↗</span>'; }
@@ -66,8 +67,9 @@ async function runCheck() {
 
 function renderReport() {
   const r = currentReport;
-  $('#empty-state').hidden = true; $('#report').hidden = false; $('#report').classList.remove('stale');
-  $('#result-status').textContent = r.status === 'incomplete' ? 'INCOMPLETE COVERAGE' : 'CHECK COMPLETE';
+  const outdated = reportRevision !== revision;
+  $('#empty-state').hidden = true; $('#report').hidden = false; $('#report').classList.toggle('stale', outdated);
+  $('#result-status').textContent = outdated ? 'INPUT CHANGED · RUN AGAIN' : r.status === 'incomplete' ? 'INCOMPLETE COVERAGE' : 'CHECK COMPLETE';
   const total = r.findings.length;
   $('#report').innerHTML = `<div class="report-heading"><p class="eyebrow">THE NEXT STEP IS CLEARER</p><h3>${r.status === 'incomplete' ? 'Not fully checked.' : total ? 'A few things to look at.' : 'No known issues found.'}</h3><p>${r.checked} additional checks evaluated · ${r.passed} passed · ${r.skipped} not applicable / unknown</p><p class="profile-summary">${escape(r.profile.cpu_model || r.profile.cpu)} / ${escape(r.profile.gpu_model || r.profile.gpu)}<br>${escape(r.profile.board || r.profile.chipset)} · macOS ${escape(r.profile.macos)}</p></div>
   <div class="count-grid"><div class="error-count"><strong>${r.counts.error}</strong><span>Errors</span></div><div class="warning-count"><strong>${r.counts.warning}</strong><span>Warnings</span></div><div><strong>${r.counts.info}</strong><span>Notes</span></div></div>
