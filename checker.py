@@ -288,7 +288,9 @@ def analyze(config, profile):
     model = generic.get("SystemProductName")
     recommended = {"haswell": {"iMac14,4", "iMac15,1"}, "broadwell": {"iMac16,2", "iMac17,1"}, "skylake": {"iMac17,1"}, "kaby-lake": {"iMac18,1", "iMac18,3"}, "coffee-lake": {"iMac19,1", "iMac19,2"}, "comet-lake": {"iMac20,1", "iMac20,2"}, "zen": {"MacPro7,1", "iMacPro1,1", "MacPro6,1"}}
     def last_supported(name):
-        if re.fullmatch(r"iMac(?:14,\d+|15,1|16,\d+|17,1)|MacPro6,1", name):
+        if re.fullmatch(r"iMac(?:14,\d+|15,1)", name):
+            return 11
+        if re.fullmatch(r"iMac(?:16,\d+|17,1)|MacPro6,1", name):
             return 12
         if re.fullmatch(r"iMac18,\d+", name):
             return 13

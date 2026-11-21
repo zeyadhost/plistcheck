@@ -87,7 +87,10 @@ def test_inactive_lilu_dependencies_not_hidden_by_native_validator(change):
 
 
 @pytest.mark.parametrize("cpu,macos,model,expected", [
-    ("haswell", "12", "iMac14,4", None),
+    ("haswell", "12", "iMac14,4", "error"),
+    ("haswell", "11.3", "iMac14,4", None),
+    ("haswell", "12", "iMac15,1", "error"),
+    ("haswell", "12", "iMac16,2", None),
     ("haswell", "13", "iMac18,3", None),
     ("skylake", "14", "iMac19,1", None),
     ("kaby-lake", "14", "iMac19,2", None),
