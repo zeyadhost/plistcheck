@@ -1,17 +1,18 @@
 import { loadPyodide } from './runtime/pyodide/pyodide.mjs';
-import { validateXML } from './validator.mjs';
+import { prepareValidator, validateXML } from './validator.mjs';
 
 // A disposable worker isolates each input, keeps the UI responsive, and can be terminated.
 self.onmessage = async ({data: {buffer, profile}}) => {
   let pyodide;
   try {
     const indexURL = new URL('./runtime/pyodide/', import.meta.url).href;
-    const [runtime, archive] = await Promise.all([
+    const [runtime, archive, validator] = await Promise.all([
       loadPyodide({indexURL}),
       fetch(new URL('./runtime/rules.zip', import.meta.url)).then(response => {
         if (!response.ok) throw new Error('The local rules could not load. Reload the page and try again.');
         return response.arrayBuffer();
       }),
+      prepareValidator(),
     ]);
     pyodide = runtime;
     await pyodide.loadPackage('hashlib');
@@ -21,7 +22,7 @@ self.onmessage = async ({data: {buffer, profile}}) => {
     pyodide.FS.writeFile('/input.plist', new Uint8Array(buffer));
     pyodide.FS.writeFile('/profile.json', JSON.stringify(profile));
     pyodide.runPython('browser_bridge.prepare()');
-    const native = await validateXML(pyodide.FS.readFile('/normalized.plist'));
+    const native = await validateXML(pyodide.FS.readFile('/normalized.plist'), validator);
     pyodide.globals.set('native_json', JSON.stringify(native));
     const result = JSON.parse(pyodide.runPython('browser_bridge.finish(native_json)'));
     self.postMessage({type: 'result', result});

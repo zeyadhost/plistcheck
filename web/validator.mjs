@@ -1,15 +1,24 @@
 import createOcvalidate from './runtime/ocvalidate.mjs';
 
-// Each check gets a fresh upstream process and an in-memory file; nothing is uploaded.
-export async function validateXML(bytes) {
+// Finish all downloads/compilation before starting the short validation deadline.
+export async function prepareValidator() {
   const lines = [];
-  let module;
   try {
-    module = await createOcvalidate({
+    const module = await createOcvalidate({
       noInitialRun: true,
       print: line => lines.push(line),
       printErr: line => lines.push(line),
     });
+    return {module, lines};
+  } catch {
+    return {lines};
+  }
+}
+
+// Each check gets a fresh upstream process and an in-memory file; nothing is uploaded.
+export async function validateXML(bytes, prepared) {
+  const {module, lines} = prepared ?? await prepareValidator();
+  try {
     module.FS.writeFile('/config.plist', bytes);
     const code = module.callMain(['/config.plist']);
     const output = lines.join('\n').replaceAll('/config.plist', '[local config]').slice(0, 50000);
