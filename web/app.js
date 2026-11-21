@@ -9,6 +9,8 @@ let severity = 'all';
 let profileEdited = false;
 const escape = (text) => String(text ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const familyLabel = (field, value) => [...form.elements[field].options].find(option => option.value === value)?.textContent.trim() || 'Not specified';
+const severityLabel = {all:'All findings', error:'Errors', warning:'Warnings', info:'Notes'};
+const severityName = {error:'Error', warning:'Warning', info:'Note'};
 
 function error(message) { $('#form-error').textContent = message; $('#form-error').hidden = !message; $('#file').setAttribute('aria-invalid', message ? 'true' : 'false'); }
 function stale() {
@@ -53,6 +55,7 @@ $('#dropzone').addEventListener('drop', event => setFile(event.dataTransfer.file
 function profileChanged() {
   profileEdited = true;
   $('#core-count-field').hidden = form.elements.cpu.value !== 'zen';
+  form.elements.cpu_cores.disabled = form.elements.cpu.value !== 'zen';
   stale();
 }
 form.addEventListener('change', profileChanged);
@@ -83,7 +86,7 @@ $('#demo').addEventListener('click', async () => {
 form.addEventListener('submit', event => { event.preventDefault(); runCheck(); });
 async function runCheck() {
   if (running) return;
-  if (!selectedFile) { error('Add a config.plist, or try the example first.'); $('#file').focus(); return; }
+  if (!selectedFile) { error('Add a config.plist, or try the example first.'); $('#file').focus({preventScroll:true}); $('#form-error').scrollIntoView({block:'nearest', behavior:'instant'}); return; }
   running = true; error('');
   const currentRevision = revision;
   const data = new FormData(form);
@@ -91,6 +94,7 @@ async function runCheck() {
   $('#run').disabled = true;
   $('#run').textContent = 'Checking configuration…';
   $('#result-status').textContent = 'RUNNING CHECKS…';
+  $('#filter-status').textContent = '';
   try {
     const response = await fetch('/api/check', {method:'POST',body:data});
     const result = await response.json();
@@ -113,10 +117,10 @@ function renderReport() {
   $('#report').innerHTML = `<div class="report-heading"><h3>${heading}</h3><p>${r.checks.length} source-linked rules: ${r.passed} passed · ${failed} flagged · ${r.skipped} skipped. Official validation is shown separately below.</p><p class="profile-summary">${escape(r.profile.cpu_model || familyLabel('cpu', r.profile.cpu))} / ${escape(r.profile.gpu_model || familyLabel('gpu', r.profile.gpu))}<br>${escape(r.profile.board || familyLabel('chipset', r.profile.chipset))} · macOS ${escape(r.profile.macos)}${r.profile.cpu === 'zen' && r.profile.cpu_cores ? ` · ${r.profile.cpu_cores} physical cores` : ''}</p></div>
   <div class="count-grid"><div class="error-count"><strong>${r.counts.error}</strong><span>Errors</span></div><div class="warning-count"><strong>${r.counts.warning}</strong><span>Warnings</span></div><div><strong>${r.counts.info}</strong><span>Notes</span></div></div>
   <div class="report-toolbar"><div class="filters" role="group" aria-label="Filter findings">${['all','error','warning','info'].map(s => `<button type="button" data-filter="${s}" aria-pressed="${severity === s}">${s === 'all' ? 'All' : s === 'info' ? 'Notes' : s[0].toUpperCase() + s.slice(1) + 's'}</button>`).join('')}</div><button class="download" type="button" id="download" aria-label="Download diagnostic report as JSON">↓ JSON</button></div>
-  <div class="findings">${r.findings.filter(f => severity === 'all' || f.severity === severity).map(f => `<details class="finding ${escape(f.severity)}"><summary><span class="severity-mark">${f.severity === 'error' ? '×' : f.severity === 'warning' ? '!' : 'i'}</span><span><small>${escape(f.path)}</small><strong>${escape(f.title)}</strong></span><i>+</i></summary><div class="finding-body"><p>${escape(f.detail)}</p><div class="fix"><span>WHAT TO DO</span><p>${escape(f.fix)}</p></div><a href="${escape(f.source)}" target="_blank" rel="noreferrer">Read the source ↗</a></div></details>`).join('') || '<p class="no-findings">No findings in this category. Review the coverage gaps below.</p>'}</div>
+  <div class="findings">${r.findings.filter(f => severity === 'all' || f.severity === severity).map(f => `<details class="finding ${escape(f.severity)}"><summary><span class="severity-mark" aria-hidden="true">${f.severity === 'error' ? '×' : f.severity === 'warning' ? '!' : 'i'}</span><span><small>${severityName[f.severity]} · ${escape(f.path)}</small><strong>${escape(f.title)}</strong></span><i aria-hidden="true">+</i></summary><div class="finding-body"><p>${escape(f.detail)}</p><div class="fix"><span>WHAT TO DO</span><p>${escape(f.fix)}</p></div><a href="${escape(f.source)}" target="_blank" rel="noreferrer">Read the source ↗</a></div></details>`).join('') || '<p class="no-findings">No findings in this category. Review the coverage gaps below.</p>'}</div>
   <details class="native"><summary><span>Official ocvalidate output</span><span class="native-status">${escape(r.native.status)} ↗</span></summary><p>Native issue counts can include several diagnostics. The error card above groups them into one finding.</p><pre>${escape(r.native.output)}</pre></details>
   <details class="gaps" open><summary>Not checked — read before you boot <span>↗</span></summary><ul>${r.gaps.map(g => `<li>${escape(g)}</li>`).join('')}</ul><p>No automatic fixes. No boot guarantee. Keep a backup EFI and verify every change.</p></details>`;
-  document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { severity = button.dataset.filter; renderReport(); document.querySelector(`[data-filter="${severity}"]`).focus({preventScroll:true}); }));
+  document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => { severity = button.dataset.filter; renderReport(); document.querySelector(`[data-filter="${severity}"]`).focus({preventScroll:true}); const count = currentReport.findings.filter(f => severity === 'all' || f.severity === severity).length; $('#filter-status').textContent = `${severityLabel[severity]} selected, ${count} ${count === 1 ? 'finding' : 'findings'}.${reportRevision !== revision ? ' Previous report: inputs changed; run again.' : ''}`; }));
   $('#download').addEventListener('click', () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(currentReport,null,2)],{type:'application/json'}));
     const a = document.createElement('a'); a.href = url; a.download = 'plistcheck-report.json'; a.click();
