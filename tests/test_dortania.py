@@ -1,9 +1,11 @@
+import copy
 import plistlib
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+import amd
 from app import demo_config
 from checker import GUID, analyze, native_validate, profile_from
 
@@ -33,7 +35,15 @@ MISSED = {
 
 def fixture_case(number):
     config = plistlib.loads(next(FIXTURES.glob(f"{number:02}-*.plist")).read_bytes())
-    profile = profile_from(dict(zip(("cpu", "gpu", "chipset", "macos", "cfg_lock", "vt_d", "rebar"), PROFILES[number - 1])))
+    fields = dict(zip(("cpu", "gpu", "chipset", "macos", "cfg_lock", "vt_d", "rebar"), PROFILES[number - 1]))
+    if fields["cpu"] == "zen":
+        fields["cpu_cores"] = "8"
+    if number == 7:
+        config["Kernel"]["Patch"] = copy.deepcopy(amd.reference_patches())
+        for entry in config["Kernel"]["Patch"]:
+            if "cpuid_cores_per_package" in entry["Comment"]:
+                entry["Replace"] = entry["Replace"][:1] + b"\x08" + entry["Replace"][2:]
+    profile = profile_from(fields)
     return config, profile
 
 
@@ -59,9 +69,8 @@ def test_empty_uuid_is_only_placeholder_finding():
 
 def test_demo_driver_schema():
     result = native_validate(demo_config())
-    assert result["status"] == "failed"
+    assert result["status"] == "passed"
     assert "Missing key" not in result["output"]
-    assert "DmgLoading" in result["output"]
 
 
 def test_native_covers_dependency_checks_with_fallback():

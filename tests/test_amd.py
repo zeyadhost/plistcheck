@@ -13,6 +13,7 @@ from checker import ConfigError, analyze, native_validate, profile_from
 
 def amd_config(cores=8):
     config = demo_config()
+    config["ACPI"]["Add"] = []
     config["Kernel"]["Patch"] = copy.deepcopy(amd.reference_patches())
     for entry in config["Kernel"]["Patch"]:
         if "cpuid_cores_per_package" in entry["Comment"]:
