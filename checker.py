@@ -54,6 +54,8 @@ def parse_config(data):
             count += 1
             if depth > 64 or count > 100000:
                 raise ConfigError("The plist exceeds the nesting or object limit.")
+            if obj is None or isinstance(obj, plistlib.UID):
+                raise ConfigError("This binary plist contains null or UID values, which OpenCore's XML config format does not support.")
             if isinstance(obj, dict):
                 stack.extend((v, depth + 1) for v in obj.values())
             elif isinstance(obj, list):

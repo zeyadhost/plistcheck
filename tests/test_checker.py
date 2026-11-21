@@ -132,3 +132,11 @@ def test_nested_kext_bundle_names_and_plugin_order():
         entry["BundlePath"] = "Drivers/" + entry["BundlePath"]
     ids = finding_ids(config)
     assert not {"lilu", "smc", "order-WhateverGreen.kext"} & ids
+
+
+@pytest.mark.parametrize("value", [None, plistlib.UID(1)])
+def test_binary_only_values_rejected_without_server_error(client, value):
+    data = plistlib.dumps({"unsupported": value}, fmt=plistlib.FMT_BINARY)
+    response = client.post("/api/check", data={"config": (io.BytesIO(data), "config.plist")})
+    assert response.status_code == 400
+    assert "null or UID" in response.json["error"]
