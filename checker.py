@@ -169,7 +169,7 @@ def native_validate(config):
             "issues": int(match.group(1)) if match else (0 if result.returncode == 0 else 1)}
 
 
-def analyze(config, profile):
+def analyze(config, profile, *, native=None):
     findings, checks = [], []
     device, selected_cpu = profile["device"], profile["cpu"]
     laptop = device == "laptop"
@@ -196,7 +196,8 @@ def analyze(config, profile):
     else:
         coverage = "No desktop or laptop profile was selected. Device-specific rules were not run."
     hardware_incomplete = not (laptop_guide or desktop_cpu)
-    native = native_validate(config)
+    if native is None:
+        native = native_validate(config)
 
     def check(key, passed, title, path, detail, fix, severity="warning", link=source, applicable=True):
         if native["status"] in ("passed", "failed") and (key == "lilu-quirk" or (key.startswith("order-") and not inactive_lilu)):
