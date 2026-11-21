@@ -112,3 +112,15 @@ def test_deep_xml_rejected():
     data = b"<plist>" + b"<array>" * 66 + b"<true/>" + b"</array>" * 66 + b"</plist>"
     with pytest.raises(ConfigError, match="deeply"):
         parse_config(data)
+
+
+def test_out_of_range_kexts_and_patches_do_not_satisfy_presence_checks():
+    config = demo_config()
+    for kext in config["Kernel"]["Add"]:
+        kext["MaxKernel"] = "19.9.9"
+    assert {"lilu", "smc"} <= finding_ids(config)
+    config["Kernel"]["Patch"] = [{"Enabled": True, "MinKernel": "24.0.0", "MaxKernel": ""}]
+    assert "amd-patches" in finding_ids(config, cpu="zen", macos="14")
+    for kext in config["Kernel"]["Add"]:
+        kext["MaxKernel"] = ""
+    assert "smc" not in finding_ids(config)

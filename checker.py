@@ -90,9 +90,34 @@ def get(config, path, default=None):
     return value
 
 
-def entries(config, path):
+def entries(config, path, kernel_range=None):
     value = get(config, path, [])
-    return [v for v in value if isinstance(v, dict) and v.get("Enabled") is True] if isinstance(value, list) else []
+    enabled = [v for v in value if isinstance(v, dict) and v.get("Enabled") is True] if isinstance(value, list) else []
+    if kernel_range is None:
+        return enabled
+    def applicable(entry):
+        if entry.get("Arch", "Any") not in ("Any", "x86_64"):
+            return False
+        try:
+            bounds = []
+            for key, default in (("MinKernel", (0, 0, 0)), ("MaxKernel", (999, 999, 999))):
+                raw = entry.get(key, "")
+                if not isinstance(raw, str):
+                    return False
+                parts = tuple(int(p) for p in raw.split(".")) if raw else default
+                if len(parts) > 3 or any(p < 0 for p in parts):
+                    return False
+                bounds.append(parts + (0,) * (3 - len(parts)))
+            # Only count entries known to cover the entire selected OS family.
+            return bounds[0] <= kernel_range[0] and bounds[1] >= kernel_range[1]
+        except ValueError:
+            return False
+    return [entry for entry in enabled if applicable(entry)]
+
+
+def darwin_range(macos):
+    major = {"10.15": 19, "11.0": 20, "11.3": 20, "12": 21, "13": 22, "14": 23, "15": 24}[macos]
+    return ((major, 4 if macos == "11.3" else 0, 0), (major, 3 if macos == "11.0" else 99, 99))
 
 
 def native_validate(config):
@@ -125,7 +150,8 @@ def analyze(config, profile):
             findings.append({"id": key, "severity": severity, "title": title, "path": path,
                              "detail": detail, "fix": fix, "source": link})
 
-    kexts = [str(e.get("BundlePath", "")).split("/")[0].lower() for e in entries(config, "Kernel/Add")]
+    kernel_range = darwin_range(profile["macos"])
+    kexts = [str(e.get("BundlePath", "")).split("/")[0].lower() for e in entries(config, "Kernel/Add", kernel_range)]
     acpi = [str(e.get("Path", "")).lower() for e in entries(config, "ACPI/Add")]
     drivers = [str(e.get("Path", "")).lower() for e in entries(config, "UEFI/Drivers")]
     has = lambda name: name.lower() in kexts
@@ -162,7 +188,7 @@ def analyze(config, profile):
     check("z390services", get(config, "Booter/Quirks/ProtectUefiServices") is True, "Z390 firmware services are not protected", "Booter → Quirks → ProtectUefiServices", "Dortania recommends this quirk on Z390 boards.", "Enable ProtectUefiServices and verify against your firmware.", applicable=profile["chipset"] == "z390")
     for field, path in [("DummyPowerManagement", "Kernel/Emulate/"), ("ProvideCurrentCpuInfo", "Kernel/Quirks/")]:
         check("amd-" + field, get(config, path + field) is True, f"AMD Zen needs {field}", (path + field).replace("/", " → "), "Dortania's AMD Zen configuration enables this option.", f"Set {field} to true for the selected AMD Zen profile.", "error", applicable=cpu == "zen")
-    check("amd-patches", bool(entries(config, "Kernel/Patch")), "No AMD kernel patches are enabled", "Kernel → Patch", "AMD Zen requires version-appropriate AMD Vanilla patches, including CPU core-count edits.", "Apply the current AMD Vanilla patches for your CPU and macOS version; this check does not validate their contents.", "error", "https://github.com/AMD-OSX/AMD_Vanilla", applicable=cpu == "zen")
+    check("amd-patches", bool(entries(config, "Kernel/Patch", kernel_range)), "No AMD kernel patches cover the selected macOS range", "Kernel → Patch", "AMD Zen requires version-appropriate AMD Vanilla patches, including CPU core-count edits.", "Apply the current AMD Vanilla patches for your CPU and macOS version; this check does not validate their contents.", "error", "https://github.com/AMD-OSX/AMD_Vanilla", applicable=cpu == "zen")
     gpu_source = "https://dortania.github.io/GPU-Buyers-Guide/"
     check("gpu-unsupported", profile["gpu"] not in ("intel-xe", "nvidia-turing", "amd-navi24"), "The selected GPU family has no native macOS acceleration", "Hardware → Graphics", "Intel Xe, NVIDIA Turing and later, and AMD Navi 24 are not natively supported by macOS.", "Use a supported GPU or disable this GPU and use a supported alternative. A plist edit cannot add a missing driver.", "error", gpu_source)
     check("gpu-maxwell", profile["gpu"] != "nvidia-maxwell", "NVIDIA Maxwell / Pascal is unsupported on this macOS", "Hardware → Graphics", "NVIDIA web drivers stop at macOS High Sierra, older than every target offered here.", "Use a supported graphics device for this macOS version.", "error", gpu_source)
@@ -197,7 +223,8 @@ def analyze(config, profile):
                             "fix": "Resolve these diagnostics with the OpenCore 1.0.8 configuration manual, then run the check again.", "source": DOCS})
     gaps = ["EFI files: presence, versions, executable contents and kext dependencies on disk were not inspected.",
             "ACPI contents, firmware behavior, USB mapping quality, SMBIOS/macOS compatibility and actual boot success require manual verification.",
-            "CPU/GPU model and board text are report labels, not automatically detected hardware. Rules use your selected families and chipset."]
+            "CPU/GPU model and board text are report labels, not automatically detected hardware. Rules use your selected families and chipset.",
+            "Kext and patch presence checks count only x86_64/Any entries whose kernel ranges cover the selected macOS family. Narrower ranges need manual review for your exact point release."]
     if cpu == "other":
         gaps.append("No CPU-generation-specific rules ran for Other / unknown. This is a desktop checker; laptop and newer Intel workarounds are not covered.")
     if profile["gpu"] == "other":
